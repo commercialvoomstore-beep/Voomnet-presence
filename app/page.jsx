@@ -1,16 +1,25 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import Splash from './components/Splash';
 import { LiveClock, LiveDot } from './components/primitives';
 
+// Le splash ne joue qu'une seule fois par chargement de page :
+// un retour ultérieur sur l'accueil (bouton retour, navigation) ne le rejoue pas.
+let splashSeen = false;
+
 export default function HomePage() {
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(splashSeen);
+
+  const handleDone = useCallback(() => {
+    splashSeen = true;
+    setReady(true);
+  }, []);
 
   return (
     <main className="container page">
-      {!ready && <Splash onDone={() => setReady(true)} />}
+      {!ready && <Splash onDone={handleDone} />}
 
       <header className="row-between">
         <div className="brand-logo">

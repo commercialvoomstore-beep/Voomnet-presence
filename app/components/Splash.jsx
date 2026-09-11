@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // Constellation ICT en fond (coordonnées fixes = rendu déterministe)
 const NODES = [
@@ -24,26 +24,35 @@ const HOT = new Set([2, 8, 13, 19]);
 export default function Splash({ onDone, minDuration = 2700 }) {
   const [exit, setExit] = useState(false);
   const [gone, setGone] = useState(false);
+  const started = useRef(false);
+  const doneRef = useRef(onDone);
+  doneRef.current = onDone;
 
   useEffect(() => {
+    // Garde anti-double-déclenchement (React StrictMode rejoue les effets en dev) :
+    // la timeline ne démarre qu'une seule fois.
+    if (started.current) return;
+    started.current = true;
+
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     if (reduced) {
       const t = setTimeout(() => {
         setGone(true);
-        onDone?.();
+        doneRef.current?.();
       }, 350);
       return () => clearTimeout(t);
     }
     const t1 = setTimeout(() => setExit(true), minDuration);
     const t2 = setTimeout(() => {
       setGone(true);
-      onDone?.();
+      doneRef.current?.();
     }, minDuration + 600);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, [minDuration, onDone]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (gone) return null;
 
