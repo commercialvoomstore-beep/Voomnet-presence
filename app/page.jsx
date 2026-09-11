@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Splash from './components/Splash';
 import { LiveClock, LiveDot } from './components/primitives';
 
@@ -16,6 +16,13 @@ export default function HomePage() {
     splashSeen = true;
     setReady(true);
   }, []);
+
+  // Filet de sécurité : l'accueil ne reste jamais bloqué sur le splash.
+  useEffect(() => {
+    if (ready) return undefined;
+    const t = setTimeout(handleDone, 5000);
+    return () => clearTimeout(t);
+  }, [ready, handleDone]);
 
   return (
     <main className="container page">

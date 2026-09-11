@@ -29,10 +29,14 @@ export default function Splash({ onDone, minDuration = 1600 }) {
   doneRef.current = onDone;
 
   useEffect(() => {
-    // Garde anti-double-déclenchement (React StrictMode rejoue les effets en dev) :
-    // la timeline ne démarre qu'une seule fois.
-    if (started.current) return;
+    // React StrictMode (dev) exécute : setup → cleanup → setup.
+    // Le cleanup libère la garde : la timeline est planifiée exactement une fois.
+    if (started.current) return undefined;
     started.current = true;
+
+    const release = () => {
+      started.current = false;
+    };
 
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     if (reduced) {
@@ -40,7 +44,10 @@ export default function Splash({ onDone, minDuration = 1600 }) {
         setGone(true);
         doneRef.current?.();
       }, 350);
-      return () => clearTimeout(t);
+      return () => {
+        clearTimeout(t);
+        release();
+      };
     }
     const t1 = setTimeout(() => setExit(true), minDuration);
     const t2 = setTimeout(() => {
@@ -50,6 +57,7 @@ export default function Splash({ onDone, minDuration = 1600 }) {
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
+      release();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
