@@ -10,10 +10,10 @@
   --ink: #0a1f33;
   --ink-soft: #45586c;
   --ink-faint: #8a99a9;
-  --navy: #0a2540;
-  --navy-2: #123a5f;
-  --accent: #0f6f5c;
-  --accent-soft: #e7f5f1;
+  --navy: #1a1a63;
+  --navy-2: #26267c;
+  --accent: #611e93;
+  --accent-soft: #f2e9fa;
   --success: #0f8a5f;
   --success-soft: #e5f6ee;
   --warn: #b7791f;
@@ -88,7 +88,7 @@ button { font-family: inherit; }
 .brand-mark {
   width: 36px; height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--navy) 0%, var(--accent) 100%);
+  background: linear-gradient(135deg, #1a1a63 0%, #7b2fc0 100%);
   color: #fff;
   display: flex; align-items: center; justify-content: center;
   font-weight: 800; font-size: 15px; letter-spacing: 0.02em;
@@ -122,7 +122,7 @@ button { font-family: inherit; }
 .btn-ghost { background: var(--surface); color: var(--ink); border-color: var(--border-strong); }
 .btn-ghost:hover { background: #f1f3f7; }
 .btn-accent { background: var(--accent); }
-.btn-accent:hover { background: #0c5b4b; }
+.btn-accent:hover { background: #4d1776; }
 .btn-danger { background: var(--danger); }
 .btn-danger:hover { background: #a93226; }
 .btn-sm { padding: 6px 12px; font-size: 13px; border-radius: 8px; }
@@ -240,8 +240,8 @@ button { font-family: inherit; }
   display: flex; align-items: center; justify-content: center;
   padding: 24px;
   background:
-    radial-gradient(1000px 500px at 80% -10%, rgba(15, 111, 92, 0.07), transparent 60%),
-    radial-gradient(800px 400px at 10% 110%, rgba(10, 37, 64, 0.06), transparent 60%),
+    radial-gradient(1000px 500px at 80% -10%, rgba(97, 30, 147, 0.08), transparent 60%),
+    radial-gradient(800px 400px at 10% 110%, rgba(26, 26, 99, 0.07), transparent 60%),
     var(--bg);
 }
 .auth-card {

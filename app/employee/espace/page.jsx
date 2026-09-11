@@ -2,7 +2,16 @@
 
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { STATUS_LABELS, abidjanNow, closedPauseMinutes, formatHm, hhmmToMinutes, isOnPause } from '@/lib/rules';
+import {
+  STATUS_LABELS,
+  abidjanNow,
+  closedPauseMinutes,
+  formatHm,
+  hhmmToMinutes,
+  isOnPause,
+  lateMinutes,
+  workedMinutes,
+} from '@/lib/rules';
 
 const STATUS_PILL = {
   present: 'pill-present',
@@ -169,6 +178,23 @@ export default function EmployeeSpace() {
   const canDepart = !!today.arrival && !today.departure && !onPause;
   const canPause = !!today.arrival && !today.departure && !onPause;
   const pauses = today.pauses || [];
+  const nowRef = clock || abidjanNow(new Date());
+  const worked = workedMinutes(today, settings, nowRef);
+  const late = lateMinutes(today.arrival, settings);
+
+  const timeline = [];
+  if (today.arrival) {
+    timeline.push({ time: today.arrival, label: late > 0 ? `Arrivée — en retard de ${formatHm(late)}` : 'Arrivée — à l\u2019heure', tone: late > 0 ? 'warn' : 'success' });
+  }
+  pauses.forEach((p, i) => {
+    timeline.push({ time: p.start, label: `Pause ${pauses.length > 1 ? i + 1 : ''} — début`.trim(), tone: 'info' });
+    if (p.end) timeline.push({ time: p.end, label: 'Retour de pause', tone: 'info' });
+  });
+  if (today.departure) {
+    timeline.push({ time: today.departure, label: 'Départ réel — journée terminée', tone: 'success' });
+  } else if (today.arrival) {
+    timeline.push({ time: settings.departureTime, label: 'Départ théorique (attendu)', tone: 'pending' });
+  }
 
   return (
     <>
@@ -213,98 +239,119 @@ export default function EmployeeSpace() {
           </div>
         )}
 
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', alignItems: 'start' }}>
-          {/* Profil */}
-          <div className="card card-pad">
-            <div className="card-title">Mon profil</div>
-            <div className="row" style={{ gap: 16 }}>
-              <div className="avatar avatar-lg">
-                {employee.photo ? (
-                  <img src={employee.photo} alt="Photo de profil" />
-                ) : (
-                  (employee.name || '?').slice(0, 2).toUpperCase()
-                )}
-              </div>
-              <div>
-                {nameEdit ? (
-                  <div className="row">
-                    <input
-                      className="input"
-                      style={{ maxWidth: 180 }}
-                      value={nameDraft}
-                      onChange={(e) => setNameDraft(e.target.value)}
-                      maxLength={60}
-                    />
-                    <button
-                      className="btn btn-sm"
-                      onClick={async () => {
-                        if (await postEmployee({ action: 'updateProfile', name: nameDraft }, 'Nom mis à jour.')) {
-                          setNameEdit(false);
-                        }
-                      }}
-                    >
-                      Enregistrer
-                    </button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setNameEdit(false)}>
-                      Annuler
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ fontWeight: 800, fontSize: 18 }}>
-                    {employee.name}{' '}
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      style={{ marginLeft: 8 }}
-                      onClick={() => {
-                        setNameDraft(employee.name);
-                        setNameEdit(true);
-                      }}
-                    >
-                      Renommer
-                    </button>
-                  </div>
-                )}
-                <div className="small muted mono mt-1">Matricule 3CX : {employee.matricule}</div>
-                <div className="small muted">Département : {employee.department}</div>
-                <div className="small muted">Inscrit le : {employee.registeredAt}</div>
+        {/* HÉROS PROFIL */}
+        <section className="emp-hero fade-up">
+          <div className="emp-hero-inner">
+            <div className="avatar">
+              {employee.photo ? (
+                <img src={employee.photo} alt="Photo de profil" />
+              ) : (
+                (employee.name || '?').slice(0, 2).toUpperCase()
+              )}
+            </div>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              {nameEdit ? (
+                <div className="row" style={{ flexWrap: 'wrap' }}>
+                  <input
+                    className="input"
+                    style={{ maxWidth: 200 }}
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    maxLength={60}
+                    aria-label="Nouveau nom"
+                  />
+                  <button
+                    className="btn btn-sm"
+                    style={{ background: '#fff', color: 'var(--voom-navy)', boxShadow: 'none' }}
+                    onClick={async () => {
+                      if (await postEmployee({ action: 'updateProfile', name: nameDraft }, 'Nom mis à jour.')) {
+                        setNameEdit(false);
+                      }
+                    }}
+                  >
+                    Enregistrer
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ background: 'transparent', color: '#fff', borderColor: 'rgba(255,255,255,0.4)' }}
+                    onClick={() => setNameEdit(false)}
+                  >
+                    Annuler
+                  </button>
+                </div>
+              ) : (
+                <div className="emp-name">
+                  {employee.name}{' '}
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ marginLeft: 8, background: 'rgba(255,255,255,0.14)', color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }}
+                    onClick={() => {
+                      setNameDraft(employee.name);
+                      setNameEdit(true);
+                    }}
+                  >
+                    Renommer
+                  </button>
+                </div>
+              )}
+              <div className="emp-chips">
+                <span className="emp-chip mono">3CX {employee.matricule}</span>
+                <span className="emp-chip">{employee.department}</span>
+                <span className="emp-chip">Inscrit le {employee.registeredAt}</span>
               </div>
             </div>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPhoto} />
-            <button className="btn btn-ghost btn-sm mt-2" onClick={() => fileRef.current?.click()}>
-              📷 Ajouter une photo depuis l&apos;appareil
-            </button>
+            <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+              <span className={`pill ${STATUS_PILL[today.status]}`}>{STATUS_LABELS[today.status]}</span>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPhoto} />
+              <button
+                className="btn btn-sm"
+                style={{ background: '#fff', color: 'var(--voom-navy)', boxShadow: 'none' }}
+                onClick={() => fileRef.current?.click()}
+              >
+                📷 Photo
+              </button>
+            </div>
           </div>
+        </section>
 
-          {/* Pointage */}
-          <div className="card card-pad">
-            <div className="card-title">Pointage du jour</div>
-            <div className="row-between">
+        <div className="emp-grid">
+          {/* POINTAGE */}
+          <div className="cc-card fade-up" style={{ animationDelay: '80ms' }}>
+            <div className="cc-card-head">
+              <span className="cc-card-title">⚡ Pointage du jour</span>
+            </div>
+            <div className="emp-statusbar">
               <span className={`pill ${STATUS_PILL[today.status]}`}>{STATUS_LABELS[today.status]}</span>
               <div className="small muted">
-                Arrivée {settings.arrivalTime} · tolérance {settings.toleranceMinutes} min · départ{' '}
-                {settings.departureTime}
+                {settings.arrivalTime} · tolérance {settings.toleranceMinutes} min · départ {settings.departureTime}
               </div>
             </div>
 
-            <div className="grid mt-2" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div className="card" style={{ boxShadow: 'none', padding: 14, textAlign: 'center' }}>
-                <div className="small muted">Arrivée réelle</div>
-                <div className="countdown">{today.arrival || '--:--:--'}</div>
+            <div className="emp-tiles">
+              <div className="emp-tile">
+                <div className="t">↑ Arrivée réelle</div>
+                <div className="v">{today.arrival || '--:--:--'}</div>
               </div>
-              <div className="card" style={{ boxShadow: 'none', padding: 14, textAlign: 'center' }}>
-                <div className="small muted">Départ réel</div>
-                <div className="countdown">{today.departure || '--:--:--'}</div>
+              <div className="emp-tile">
+                <div className="t">↓ Départ réel</div>
+                <div className="v">{today.departure || '--:--:--'}</div>
               </div>
             </div>
 
-            <div className="card mt-2" style={{ boxShadow: 'none', padding: 14, textAlign: 'center', background: '#f8fafb' }}>
-              <div className="small muted">Compteur avant {settings.departureTime}</div>
-              <div className="countdown mt-1">{countdownText(clock, settings.departureTime)}</div>
+            <div className="emp-count">
+              <div className="t small muted">Compteur avant {settings.departureTime}</div>
+              <div className="v">{countdownText(clock, settings.departureTime)}</div>
+            </div>
+
+            <div className="emp-stats">
+              <div className="stat-chip"><b>{formatHm(worked)}</b><span>Travaillé</span></div>
+              <div className="stat-chip"><b>{late === null ? '—' : late === 0 ? "À l'heure" : `+${formatHm(late)}`}</b><span>Retard</span></div>
+              <div className="stat-chip"><b>{pauses.length === 0 ? '—' : formatHm(closedPauseMinutes(today))}</b><span>Pauses ({pauses.length})</span></div>
             </div>
 
             {error && <div className="alert alert-error mt-2">{error}</div>}
 
-            <div className="row mt-2">
+            <div className="emp-btns">
               <button
                 className="btn btn-accent btn-lg"
                 style={{ flex: 1 }}
@@ -322,7 +369,7 @@ export default function EmployeeSpace() {
                 ↓ Pointer le départ
               </button>
             </div>
-            <div className="row mt-2">
+            <div className="mt-2">
               {onPause ? (
                 <button
                   className="btn btn-violet btn-block"
@@ -348,14 +395,46 @@ export default function EmployeeSpace() {
               </p>
             )}
           </div>
+
+          {/* TIMELINE */}
+          <div className="cc-card fade-up" style={{ animationDelay: '140ms' }}>
+            <div className="cc-card-head">
+              <span className="cc-card-title">🕓 Ma journée</span>
+            </div>
+            {timeline.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon" aria-hidden="true">🌅</div>
+                <div className="empty-title">Journée pas encore commencée</div>
+                <div className="empty-sub">Pointez votre arrivée pour démarrer la timeline.</div>
+              </div>
+            ) : (
+              <ol className="timeline">
+                {timeline.map((ev, i) => (
+                  <li key={i} className={`timeline-item tone-${ev.tone}`}>
+                    <span className="timeline-dot" aria-hidden="true" />
+                    <span className="timeline-time num">{ev.time}</span>
+                    <span className="timeline-label">{ev.label}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
         </div>
 
         <div className="grid mt-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', alignItems: 'start' }}>
-          {/* Historique */}
-          <div className="card card-pad">
-            <div className="card-title">Mon historique</div>
-            {history.length === 0 && <div className="small muted">Aucun pointage enregistré.</div>}
-            <div className="table-wrap">
+          {/* HISTORIQUE */}
+          <div className="cc-card">
+            <div className="cc-card-head">
+              <span className="cc-card-title">📅 Mon historique</span>
+            </div>
+            {history.length === 0 && (
+              <div className="empty-state">
+                <div className="empty-icon" aria-hidden="true">📋</div>
+                <div className="empty-title">Aucun pointage enregistré</div>
+                <div className="empty-sub">Vos 14 derniers jours apparaîtront ici.</div>
+              </div>
+            )}
+            <div className="table-scroll">
               {history.length > 0 && (
                 <table className="table">
                   <thead>
@@ -363,6 +442,7 @@ export default function EmployeeSpace() {
                       <th>Date</th>
                       <th>Arrivée</th>
                       <th>Départ</th>
+                      <th>Pauses</th>
                       <th>Statut</th>
                     </tr>
                   </thead>
@@ -372,6 +452,9 @@ export default function EmployeeSpace() {
                         <td className="num">{h.date}</td>
                         <td className="num">{h.arrival || '—'}</td>
                         <td className="num">{h.departure || '—'}</td>
+                        <td className="num small">
+                          {(h.pauses || []).length === 0 ? '—' : `${(h.pauses || []).length} (${formatHm(closedPauseMinutes(h))})`}
+                        </td>
                         <td>
                           <span className={`pill ${STATUS_PILL[h.status]}`}>{STATUS_LABELS[h.status]}</span>
                         </td>
@@ -383,11 +466,17 @@ export default function EmployeeSpace() {
             </div>
           </div>
 
-          {/* Notifications */}
-          <div className="card card-pad">
-            <div className="card-title">Mes notifications</div>
+          {/* NOTIFICATIONS */}
+          <div className="cc-card">
+            <div className="cc-card-head">
+              <span className="cc-card-title">🔔 Mes notifications</span>
+            </div>
             {notifications.length === 0 && (
-              <div className="small muted">Aucune notification pour le moment.</div>
+              <div className="empty-state">
+                <div className="empty-icon" aria-hidden="true">🔕</div>
+                <div className="empty-title">Aucune notification</div>
+                <div className="empty-sub">Les messages de l&apos;administration apparaîtront ici.</div>
+              </div>
             )}
             <div className="stack" style={{ gap: 10 }}>
               {notifications.map((n) => (
@@ -403,6 +492,7 @@ export default function EmployeeSpace() {
                     className="btn btn-ghost btn-sm"
                     onClick={() => postEmployee({ action: 'deleteNotification', id: n.id }, null)}
                     title="Supprimer"
+                    aria-label="Supprimer la notification"
                   >
                     ✕
                   </button>

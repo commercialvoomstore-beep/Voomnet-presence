@@ -17,6 +17,7 @@ import AnimatedNumber from '@/app/components/AnimatedNumber';
 import CommandPalette from '@/app/components/CommandPalette';
 import DotGrid from '@/app/components/DotGrid';
 import EmployeePanel from '@/app/components/EmployeePanel';
+import EmployeesTable from '@/app/components/EmployeesTable';
 import KpiCard from '@/app/components/KpiCard';
 import LiveFeed from '@/app/components/LiveFeed';
 import PresenceFlow from '@/app/components/PresenceFlow';
@@ -502,7 +503,7 @@ export default function AdminDashboard() {
             ['supervision', 'Supervision'],
             ['codes', 'Registre des codes'],
             ['notifications', 'Notifications'],
-            ['annuaire', 'Annuaire'],
+            ['annuaire', 'Employés'],
             ['parametres', 'Paramètres'],
           ].map(([key, lbl]) => (
             <button
@@ -881,30 +882,14 @@ export default function AdminDashboard() {
         )}
 
         {tab === 'annuaire' && (
-          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-            {board.employees.map((emp) => (
-              <div key={emp.matricule} className="card card-pad">
-                <div className="row" style={{ gap: 14 }}>
-                  <div className="avatar avatar-lg">
-                    {emp.photo ? <img src={emp.photo} alt="" /> : initials(emp.name)}
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: 16 }}>{emp.name}</div>
-                    <div className="small muted mono">3CX {emp.matricule}</div>
-                    <div className="mt-1">
-                      <span className={`pill ${STATUS_PILL[emp.today.status]}`}>
-                        {STATUS_LABELS[emp.today.status]}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-2 small soft">
-                  Département : {emp.department}
-                  <br />
-                  Inscrit le : {emp.registeredAt}
-                </div>
-              </div>
-            ))}
+          <div className="cc-card table-card">
+            <div className="table-head">
+              <span className="cc-card-title">👥 Employees List — profils réels synchronisés</span>
+              <LiveDot label="LIVE" lastSync={lastSync} />
+            </div>
+            <div style={{ padding: '0 20px 20px' }}>
+              <EmployeesTable employees={board.employees} onSelect={setSelected} />
+            </div>
           </div>
         )}
 
@@ -996,7 +981,7 @@ export default function AdminDashboard() {
         )}
       </main>
 
-      {selected && tab === 'supervision' && (
+      {selected && (tab === 'supervision' || tab === 'annuaire') && (
         <EmployeePanel emp={selected} settings={board.settings} onClose={() => setSelected(null)} />
       )}
       <CommandPalette

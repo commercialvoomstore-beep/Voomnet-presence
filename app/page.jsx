@@ -17,7 +17,7 @@ export default function HomePage() {
           <img src="/voomnet-mark.svg" alt="VOOMNET" width="40" height="40" />
           <div>
             <div className="brand-name">VOOMNET Presence</div>
-            <div className="brand-sub">White Enterprise Technology</div>
+            <div className="brand-sub">Solutions IT &amp; Télécoms</div>
           </div>
         </div>
         <LiveClock />
@@ -30,6 +30,7 @@ export default function HomePage() {
         <h1 className="hero-title">
           Supervision des présences <span>VOOMNET</span>
         </h1>
+        <div className="home-slogan">Innover. Connecter. Performer.</div>
         <p className="hero-sub">
           Pointage hebdomadaire du lundi au vendredi — arrivée, pauses, départ et suivi en temps réel.
         </p>
@@ -64,7 +65,7 @@ export default function HomePage() {
       </section>
 
       <footer className="mt-3 muted small" style={{ textAlign: 'center' }}>
-        Prototype de démonstration — VOOMNET TECHNOLOGY © 2026 · Fuseau Africa/Abidjan
+        VOOMNET TECHNOLOGY © 2026 · Innover. Connecter. Performer. · Fuseau Africa/Abidjan
       </footer>
     </main>
   );

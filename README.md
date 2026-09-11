@@ -1,6 +1,6 @@
 # VOOMNET Presence 2026
 
-## White Enterprise Technology
+## Innover. Connecter. Performer. — Solutions IT & Télécoms
 
 Plateforme de supervision et de gestion des présences de **VOOMNET TECHNOLOGY**. L'application permet aux administrateurs de superviser les collaborateurs en temps réel et aux employés d'enregistrer leur arrivée et leur départ du lundi au vendredi.
 
@@ -96,7 +96,13 @@ Le workflow est :
 
 ## Collaborateurs enregistrés
 
-Trois employés sont configurés par défaut, identifiés par leur matricule 3CX : `1009`, `1000`, `1004`. Les noms sont des placeholders (`Employé 1009`…) modifiables depuis l'espace employé ; départements et dates d'inscription non renseignés s'affichent comme `Non renseigné` / `Non renseignée`. Aucune donnée fictive n'est ajoutée.
+Trois employés de démonstration sont configurés par défaut (noms fictifs à vocation illustrative, modifiables depuis l'espace employé) :
+
+| Matricule 3CX | Nom | Département | Inscription |
+|---|---|---|---|
+| `1009` | Jean Kouassi | Support Technique | 15/01/2024 |
+| `1000` | Marie N'Guessan | Service Commercial | 03/06/2024 |
+| `1004` | Paul Yao | Informatique & Réseaux | 21/10/2024 |
 
 > **🔒 Confidentialité :** ne publier ni noms réels ni matricules associés dans la documentation publique (protection des données personnelles — cf. loi ivoirienne n° 2013-450). Les données locales vivent dans `data/`, exclu de Git.
 

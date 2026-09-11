@@ -4,7 +4,7 @@ import './cc.css';
 export const metadata = {
   title: 'VOOMNET Presence 2026',
   description:
-    'Plateforme de supervision et de gestion des présences VOOMNET TECHNOLOGY — prototype white enterprise.',
+    'Plateforme de supervision et de gestion des présences VOOMNET TECHNOLOGY — Innover. Connecter. Performer.',
   icons: { icon: '/voomnet-mark.svg' },
 };
 
