@@ -114,19 +114,26 @@ Trois employés sont configurés par défaut, identifiés par leur matricule 3CX
 ```text
 voomnet-presence/
 ├── app/
-│   ├── page.jsx                     # Accueil : horloge + portails Admin / Employé
-│   ├── layout.jsx                   # Layout racine (métadonnées, styles)
-│   ├── globals.css                  # Design system white enterprise
+│   ├── page.jsx                     # Accueil : splash premium + horloge + portails
+│   ├── layout.jsx                   # Layout racine (métadonnées, styles, favicon)
+│   ├── globals.css                  # Design system white enterprise (base)
+│   ├── cc.css                       # Extension Command Center (hero, KPI, splash, panels…)
+│   ├── components/                  # Splash, PresenceRing, KpiCard, LiveFeed, Toasts,
+│   │                                # EmployeePanel, CommandPalette, SupervisionMode,
+│   │                                # PresenceFlow, DotGrid, SystemStatus, primitives…
 │   ├── admin/
 │   │   ├── page.jsx                 # Connexion administrateur
-│   │   └── dashboard/page.jsx       # Command Center (5 onglets)
+│   │   └── dashboard/page.jsx       # Command Center live (5 onglets)
 │   ├── employee/
 │   │   ├── page.jsx                 # Connexion employé (matricule + code)
 │   │   └── espace/page.jsx          # Espace employé (pointage, profil, historique)
 │   └── api/                         # Route Handlers (voir Routes API)
+├── public/
+│   ├── voomnet-logo.svg             # Logo VOOMNET TECHNOLOGY (vectoriel)
+│   └── voomnet-mark.svg             # Marque (4 carrés marine/violet) + favicon
 ├── lib/
 │   ├── db.js                        # Stockage JSON, amorçage, sessions, hachage
-│   └── rules.js                     # Règles horaires et statuts (Africa/Abidjan)
+│   └── rules.js                     # Règles horaires, statuts, pauses, durées (Africa/Abidjan)
 ├── data/                            # Données locales de démo (exclu de Git)
 ├── package.json
 └── .gitignore
@@ -167,6 +174,8 @@ Les actions disponibles sont :
 
 ```text
 arrival
+pause_start
+pause_end
 departure
 ```
 

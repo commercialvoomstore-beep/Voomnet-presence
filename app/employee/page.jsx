@@ -39,9 +39,11 @@ export default function EmployeeLoginPage() {
   return (
     <main className="auth-wrap">
       <div className="auth-card">
-        <div className="brand">
-          <div className="brand-mark">VP</div>
-          <div>
+        <div className="auth-logo">
+          <img src="/voomnet-logo.svg" alt="VOOMNET TECHNOLOGY" />
+        </div>
+        <div className="brand" style={{ justifyContent: 'center' }}>
+          <div style={{ textAlign: 'center' }}>
             <div className="brand-name">VOOMNET Presence</div>
             <div className="brand-sub">Espace Employé</div>
           </div>

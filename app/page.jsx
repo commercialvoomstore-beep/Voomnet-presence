@@ -1,63 +1,43 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-
-function Clock() {
-  const [now, setNow] = useState(null);
-  useEffect(() => {
-    const tick = () => setNow(new Date());
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
-  if (!now) return <div className="clock-lg"><div className="clock-time">--:--:--</div></div>;
-  return (
-    <div className="clock-lg">
-      <div className="clock-time">
-        {now.toLocaleTimeString('fr-FR', { timeZone: 'Africa/Abidjan', hour12: false })}
-      </div>
-      <div className="clock-date">
-        {now.toLocaleDateString('fr-FR', {
-          timeZone: 'Africa/Abidjan',
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })}{' '}
-        — Abidjan
-      </div>
-    </div>
-  );
-}
+import { useState } from 'react';
+import Splash from './components/Splash';
+import { LiveClock, LiveDot } from './components/primitives';
 
 export default function HomePage() {
+  const [ready, setReady] = useState(false);
+
   return (
     <main className="container page">
+      {!ready && <Splash onDone={() => setReady(true)} />}
+
       <header className="row-between">
-        <div className="brand">
-          <div className="brand-mark">VP</div>
+        <div className="brand-logo">
+          <img src="/voomnet-mark.svg" alt="VOOMNET" width="40" height="40" />
           <div>
             <div className="brand-name">VOOMNET Presence</div>
             <div className="brand-sub">White Enterprise Technology</div>
           </div>
         </div>
-        <div className="clock">
-          <div className="clock-time">
-            {new Date().toLocaleTimeString('fr-FR', { timeZone: 'Africa/Abidjan', hour12: false })}
-          </div>
-        </div>
+        <LiveClock />
       </header>
 
-      <section className="hero">
+      <section className="home-hero">
+        <div className="home-logo">
+          <img src="/voomnet-logo.svg" alt="VOOMNET TECHNOLOGY" />
+        </div>
         <h1 className="hero-title">
           Supervision des présences <span>VOOMNET</span>
         </h1>
         <p className="hero-sub">
-          Pointage hebdomadaire du lundi au vendredi — arrivée, départ et suivi en temps réel.
+          Pointage hebdomadaire du lundi au vendredi — arrivée, pauses, départ et suivi en temps réel.
         </p>
-        <div className="mt-3">
-          <Clock />
+        <div className="home-clock">
+          <LiveClock size="md" />
+        </div>
+        <div className="home-live">
+          <LiveDot label="SYSTÈME EN LIGNE" />
         </div>
       </section>
 
@@ -76,8 +56,8 @@ export default function HomePage() {
           <div className="portal-icon">🕐</div>
           <div className="portal-title">Espace Employé</div>
           <p className="portal-desc">
-            Connexion par matricule 3CX et code personnel à usage unique pour pointer arrivée et
-            départ.
+            Connexion par matricule 3CX et code personnel à usage unique pour pointer arrivée,
+            pauses et départ.
           </p>
           <span className="btn btn-accent">Pointer ma présence →</span>
         </Link>

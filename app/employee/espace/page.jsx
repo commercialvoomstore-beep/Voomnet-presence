@@ -2,11 +2,12 @@
 
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { STATUS_LABELS, abidjanNow, hhmmToMinutes } from '@/lib/rules';
+import { STATUS_LABELS, abidjanNow, closedPauseMinutes, formatHm, hhmmToMinutes, isOnPause } from '@/lib/rules';
 
 const STATUS_PILL = {
   present: 'pill-present',
   retard: 'pill-retard',
+  pause: 'pill-pause',
   absent: 'pill-absent',
   depart_en_attente: 'pill-attente',
   termine: 'pill-termine',
@@ -104,11 +105,16 @@ export default function EmployeeSpace() {
         flash('error', json.error || 'Pointage refusé.');
         return;
       }
+      const lastPause = (json.today.pauses || []).slice(-1)[0];
       flash(
         'ok',
         action === 'arrival'
           ? `Arrivée enregistrée à ${json.today.arrival}.`
-          : `Départ enregistré à ${json.today.departure}. Bonne fin de journée !`
+          : action === 'departure'
+            ? `Départ enregistré à ${json.today.departure}. Bonne fin de journée !`
+            : action === 'pause_start'
+              ? `Pause démarrée à ${lastPause?.start || ''}.`
+              : 'Retour de pause enregistré. Bon courage !'
       );
       load();
     } catch {
@@ -159,14 +165,17 @@ export default function EmployeeSpace() {
 
   const { employee, today, history, notifications, settings } = data;
   const canArrive = !today.arrival;
-  const canDepart = !!today.arrival && !today.departure;
+  const onPause = isOnPause(today);
+  const canDepart = !!today.arrival && !today.departure && !onPause;
+  const canPause = !!today.arrival && !today.departure && !onPause;
+  const pauses = today.pauses || [];
 
   return (
     <>
       <header className="topbar">
         <div className="container topbar-inner">
-          <div className="brand">
-            <div className="brand-mark">VP</div>
+          <div className="brand-logo">
+            <img src="/voomnet-mark.svg" alt="VOOMNET" width="38" height="38" />
             <div>
               <div className="brand-name">VOOMNET Presence</div>
               <div className="brand-sub">Espace Employé</div>
@@ -312,6 +321,26 @@ export default function EmployeeSpace() {
               >
                 ↓ Pointer le départ
               </button>
+            </div>
+            <div className="row mt-2">
+              {onPause ? (
+                <button
+                  className="btn btn-violet btn-block"
+                  disabled={busy}
+                  onClick={() => point('pause_end')}
+                >
+                  ▶ Terminer ma pause (en pause depuis {pauses[pauses.length - 1]?.start})
+                </button>
+              ) : (
+                <button
+                  className="btn btn-ghost btn-block"
+                  disabled={!canPause || busy || today.status === 'weekend'}
+                  onClick={() => point('pause_start')}
+                >
+                  ⏸ Démarrer une pause
+                  {pauses.length > 0 && ` (${pauses.length} déjà prise${pauses.length > 1 ? 's' : ''} · ${formatHm(closedPauseMinutes(today))})`}
+                </button>
+              )}
             </div>
             {!canArrive && !canDepart && (
               <p className="small muted mt-1" style={{ textAlign: 'center' }}>
