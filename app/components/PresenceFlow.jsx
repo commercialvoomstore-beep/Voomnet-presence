@@ -93,9 +93,6 @@ function PresenceFlow({ employees, settings, nowMinutes }) {
           </g>
         ))}
         {buckets.map((b, i) =>
-          b % 120 === 60 - 60 || b % 120 === 0 ? null : null
-        )}
-        {buckets.map((b, i) =>
           (b - START) % 120 === 0 ? (
             <text key={b} x={x(i)} y={H - 8} className="flow-tick">
               {`${String(Math.floor(b / 60)).padStart(2, '0')}:00`}

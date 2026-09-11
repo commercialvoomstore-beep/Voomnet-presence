@@ -20,8 +20,8 @@ const LINKS = [
 ];
 const HOT = new Set([2, 8, 13, 19]);
 
-// Splash premium v2 : UNE seule timeline continue (~2,7 s), sans redémarrage.
-export default function Splash({ onDone, minDuration = 2700 }) {
+// Splash premium v2 : UNE seule timeline de 2 secondes, sans redémarrage.
+export default function Splash({ onDone, minDuration = 1600 }) {
   const [exit, setExit] = useState(false);
   const [gone, setGone] = useState(false);
   const started = useRef(false);
@@ -46,7 +46,7 @@ export default function Splash({ onDone, minDuration = 2700 }) {
     const t2 = setTimeout(() => {
       setGone(true);
       doneRef.current?.();
-    }, minDuration + 600);
+    }, minDuration + 400);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);

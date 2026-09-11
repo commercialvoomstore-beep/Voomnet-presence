@@ -15,8 +15,13 @@ export function useNowTick(intervalMs = 1000) {
 
 export const LiveClock = memo(function LiveClock({ showDate = true, size = 'md' }) {
   const now = useNowTick(1000);
+  const [mounted, setMounted] = useState(false);
   const [dateStr, setDateStr] = useState('…');
   useEffect(() => {
+    setMounted(true);
+  }, []);
+  useEffect(() => {
+    if (!mounted) return;
     setDateStr(
       new Date().toLocaleDateString('fr-FR', {
         timeZone: 'Africa/Abidjan',
@@ -26,7 +31,16 @@ export const LiveClock = memo(function LiveClock({ showDate = true, size = 'md' 
         year: 'numeric',
       })
     );
-  }, [now.date]);
+  }, [now.date, mounted]);
+  // Placeholder identique côté serveur et client : zéro erreur d'hydratation.
+  if (!mounted) {
+    return (
+      <div className={`live-clock ${size}`}>
+        <div className="live-clock-time" aria-live="off">--:--:--</div>
+        {showDate && <div className="live-clock-date">…</div>}
+      </div>
+    );
+  }
   return (
     <div className={`live-clock ${size}`}>
       <div className="live-clock-time" aria-live="off">{now.time}</div>
@@ -38,6 +52,13 @@ export const LiveClock = memo(function LiveClock({ showDate = true, size = 'md' 
 // Compte à rebours intelligent vers le départ théorique (temps réel, sans rechargement)
 export const Countdown = memo(function Countdown({ departureTime, compact = false }) {
   const now = useNowTick(1000);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  if (!mounted) {
+    return <span className={`countdown-live ${compact ? 'compact' : ''}`}>--:--:--</span>;
+  }
   const diff = hhmmToMinutes(departureTime) * 60 - now.seconds;
   if (diff <= 0) return <span className="countdown-done">Heure théorique dépassée</span>;
   return (
