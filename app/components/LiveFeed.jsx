@@ -17,7 +17,7 @@ function LiveFeed({ events }) {
       <div className="empty-state">
         <div className="empty-icon" aria-hidden="true">📡</div>
         <div className="empty-title">Aucune activité récente</div>
-        <div className="empty-sub">Les événements apparaîtront ici en temps réel.</div>
+        <div className="empty-sub">Les événements du jour apparaîtront ici au fil des pointages.</div>
       </div>
     );
   }

@@ -74,8 +74,9 @@ export default function EmployeeLoginPage() {
             <input
               id="code"
               className="input mono"
-              inputMode="numeric"
-              placeholder="6 chiffres"
+              placeholder="ex. 3CX-1009-589"
+              autoCapitalize="characters"
+              autoComplete="one-time-code"
               value={code}
               onChange={(e) => setCode(e.target.value)}
               required

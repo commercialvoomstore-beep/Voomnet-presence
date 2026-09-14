@@ -2,7 +2,7 @@
 
 ## Innover. Connecter. Performer. — Solutions IT & Télécoms
 
-Plateforme de supervision et de gestion des présences de **VOOMNET TECHNOLOGY**. L'application permet aux administrateurs de superviser les collaborateurs en temps réel et aux employés d'enregistrer leur arrivée et leur départ du lundi au vendredi.
+Plateforme de supervision et de gestion des présences de **VOOMNET TECHNOLOGY**. L'application permet aux administrateurs de superviser les collaborateurs depuis un tableau centralisé et aux employés d'enregistrer leur arrivée et leur départ du lundi au vendredi.
 
 > **⚠️ Statut : prototype de démonstration.** Le stockage est local (fichiers JSON dans `data/`) et l'authentification est simplifiée. Ne pas déployer en production sans appliquer la checklist de la section [Passage en production](#passage-en-production). Aucune donnée personnelle réelle ne doit être ajoutée à ce dépôt.
 
@@ -14,13 +14,13 @@ Plateforme de supervision et de gestion des présences de **VOOMNET TECHNOLOGY**
 
 - Vue globale de l'organisation.
 - Horloge et date réelles (fuseau Africa/Abidjan).
-- Supervision automatique — rafraîchissement toutes les 5 secondes.
+- Supervision centralisée — consolidation automatique des compteurs et du tableau.
 - Recherche et filtres par statut.
 - Compteurs : présents, absents, retards, départs en attente, journées terminées.
 - Heure d'arrivée réelle, départ théorique (configurable) et départ réel.
 - Compteur dynamique avant la fin théorique de journée.
 - Panneau détaillé par employé avec historique sur 7 jours.
-- Registre des codes individuels avec régénération (unitaire ou globale).
+- Registre des codes individuels au format `3CX-{matricule}-{suffixe}` (ex. `3CX-1009-589`), à usage unique, avec copie en un clic, régénération (unitaire ou globale) et historique des codes invalidés.
 - Notifications ciblées vers toute l'équipe ou un employé.
 - Annuaire des employés avec photos de profil.
 - Page Paramètres : heures d'arrivée/départ, tolérance, jours ouvrés.
@@ -33,7 +33,7 @@ Plateforme de supervision et de gestion des présences de **VOOMNET TECHNOLOGY**
 - Pointage réel du départ.
 - Blocage du double pointage (409 en cas de tentative).
 - Historique des pointages (arrivée, départ, statut).
-- Compteur dynamique en temps réel jusqu'à l'heure théorique de départ.
+- Compteur dynamique jusqu'à l'heure théorique de départ.
 - Profil employé : renommage et ajout de photo depuis l'appareil (redimensionnée automatiquement).
 - Réception et suppression des notifications personnelles.
 

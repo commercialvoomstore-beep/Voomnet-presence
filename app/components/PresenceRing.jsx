@@ -35,8 +35,8 @@ function PresenceRing({ rate = 0, size = 196, stroke = 16 }) {
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <defs>
           <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#1a1a63" />
-            <stop offset="100%" stopColor="#7b2fc0" />
+            <stop offset="0%" stopColor="#2b2e5c" />
+            <stop offset="100%" stopColor="#7a7ea6" />
           </linearGradient>
         </defs>
         <circle cx={c} cy={c} r={r} fill="none" stroke="#eceff4" strokeWidth={stroke} />

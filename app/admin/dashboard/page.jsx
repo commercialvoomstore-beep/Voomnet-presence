@@ -5,12 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   STATUS_LABELS,
   WEEKDAYS_FR,
-  abidjanNow,
   formatHm,
   hhmmToMinutes,
   isLate,
   openPauseMinutes,
-  secondsToDeparture,
   workedMinutes,
 } from '@/lib/rules';
 import AnimatedNumber from '@/app/components/AnimatedNumber';
@@ -23,9 +21,8 @@ import LiveFeed from '@/app/components/LiveFeed';
 import PresenceFlow from '@/app/components/PresenceFlow';
 import PresenceRing from '@/app/components/PresenceRing';
 import SupervisionMode from '@/app/components/SupervisionMode';
-import SystemStatus from '@/app/components/SystemStatus';
 import Toasts from '@/app/components/Toasts';
-import { Countdown, LiveClock, LiveDot, initials, useNowTick } from '@/app/components/primitives';
+import { Countdown, LiveClock, initials, useNowTick } from '@/app/components/primitives';
 
 const STATUS_PILL = {
   present: 'pill-present',
@@ -47,7 +44,7 @@ const FILTERS = [
   ['termine', 'Journée terminée'],
 ];
 
-function TopBar({ label, lastSync, syncError, onOpenPalette, onSupervision, onLogout }) {
+function TopBar({ label, onOpenPalette, onSupervision, onLogout }) {
   return (
     <header className="topbar">
       <div className="container container-wide topbar-inner">
@@ -62,9 +59,8 @@ function TopBar({ label, lastSync, syncError, onOpenPalette, onSupervision, onLo
           <button type="button" className="search-btn" onClick={onOpenPalette} aria-label="Rechercher un employé">
             ⌘K Rechercher…
           </button>
-          <LiveDot label={syncError ? 'HORS LIGNE' : 'LIVE'} lastSync={lastSync} />
           <LiveClock showDate={false} />
-          <span className="pill pill-attente">{label}</span>
+          <span className="role-pill">{label}</span>
           <button type="button" className="btn btn-violet btn-sm" onClick={onSupervision}>
             👁 Supervision
           </button>
@@ -85,12 +81,13 @@ export default function AdminDashboard() {
   const [board, setBoard] = useState(null);
   const [registry, setRegistry] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [codesHistory, setCodesHistory] = useState([]);
+  const [copiedCode, setCopiedCode] = useState(null);
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [banner, setBanner] = useState(null);
-  const [lastSync, setLastSync] = useState(null);
-  const [syncError, setSyncError] = useState(false);
+  const [boardError, setBoardError] = useState(false);
   const [supervision, setSupervision] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
@@ -206,26 +203,28 @@ export default function AdminDashboard() {
     try {
       const res = await fetch('/api/attendance', { headers: { 'x-admin-token': token } });
       if (res.status === 401) return logout();
-      if (!res.ok) throw new Error('sync');
+      if (!res.ok) throw new Error('load-failed');
       const data = await res.json();
       setPrevCounters(countersRef.current);
       countersRef.current = data.counters;
       setBoard(data);
       diffAndNotify(data.employees, data.settings);
-      setLastSync(abidjanNow(new Date()).time);
-      setSyncError(false);
+      setBoardError(false);
       setSelected((sel) =>
         sel ? data.employees.find((e) => e.matricule === sel.matricule) || null : null
       );
     } catch {
-      setSyncError(true);
+      setBoardError(true);
     }
   }, [token, logout, diffAndNotify]);
 
   const loadCodes = useCallback(async () => {
     if (!token) return;
     const res = await fetch('/api/codes', { headers: authHeaders() });
-    if (res.ok) setRegistry((await res.json()).registry);
+    if (!res.ok) return;
+    const data = await res.json();
+    setRegistry(data.registry);
+    setCodesHistory(data.history || []);
   }, [token, authHeaders]);
 
   const loadNotifications = useCallback(async () => {
@@ -370,6 +369,21 @@ export default function AdminDashboard() {
     return m;
   }, [board]);
 
+  async function copyCode(code) {
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = code;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode((c) => (c === code ? null : c)), 1600);
+  }
+
   async function regenerate(matricule) {
     const res = await fetch('/api/codes', {
       method: 'POST',
@@ -379,6 +393,7 @@ export default function AdminDashboard() {
     if (res.ok) {
       const data = await res.json();
       setRegistry(data.registry);
+      setCodesHistory(data.history || []);
       flash('ok', matricule ? `Code régénéré pour ${matricule}.` : 'Tous les codes ont été régénérés.');
     } else {
       flash('error', 'Régénération impossible.');
@@ -473,8 +488,6 @@ export default function AdminDashboard() {
     <>
       <TopBar
         label={label}
-        lastSync={lastSync}
-        syncError={syncError}
         onOpenPalette={() => setPaletteOpen(true)}
         onSupervision={() => setSupervision(true)}
         onLogout={logout}
@@ -486,12 +499,10 @@ export default function AdminDashboard() {
             Aujourd&apos;hui n&apos;est pas un jour ouvré configuré — le pointage est désactivé.
           </div>
         )}
-        {syncError && (
+        {boardError && (
           <div className="error-state mb-2">
-            <div className="empty-title">⚠ Synchronisation interrompue</div>
-            <div className="empty-sub">
-              Dernière synchronisation : {lastSync || 'jamais'}
-            </div>
+            <div className="empty-title">⚠ Données momentanément indisponibles</div>
+            <div className="empty-sub">Vérifiez votre connexion puis réessayez.</div>
             <button type="button" className="btn btn-sm mt-1" onClick={loadBoard}>
               Réessayer
             </button>
@@ -539,13 +550,10 @@ export default function AdminDashboard() {
               <div className="cc-hero-main fade-up">
                 <div className="cc-greeting">{greeting}, Administrateur 👋</div>
                 <h1 className="cc-title">Centre de contrôle de présence</h1>
-                <div className="cc-sub">Supervision temps réel — fuseau Africa/Abidjan</div>
+                <div className="cc-sub">Supervision des présences — fuseau Africa/Abidjan</div>
                 <div className="cc-meta">
                   <span className="cc-date">{dateLong}</span>
                   <LiveClock showDate={false} />
-                </div>
-                <div className="cc-meta">
-                  <LiveDot label={syncError ? 'HORS LIGNE' : 'SYSTÈME OPÉRATIONNEL'} lastSync={lastSync} />
                 </div>
               </div>
               <div className="cc-hero-side fade-up" style={{ animationDelay: '80ms' }}>
@@ -608,14 +616,10 @@ export default function AdminDashboard() {
                     ))}
                   </div>
                 )}
-                <div className="mt-2">
-                  <SystemStatus online={!syncError} polling={!syncError} lastSync={lastSync} error={syncError} />
-                </div>
               </div>
               <div className="cc-card fade-up" style={{ animationDelay: '180ms' }}>
                 <div className="cc-card-head">
-                  <span className="cc-card-title">📡 Présence en direct</span>
-                  <LiveDot label="LIVE" />
+                  <span className="cc-card-title">🕘 Activité récente</span>
                 </div>
                 <LiveFeed events={events} />
               </div>
@@ -639,7 +643,7 @@ export default function AdminDashboard() {
             {/* TABLEAU LIVE VIEW */}
             <div className="cc-card table-card fade-up" id="cc-table" style={{ animationDelay: '260ms' }}>
               <div className="table-head">
-                <span className="cc-card-title">🖥 Company live view</span>
+                <span className="cc-card-title">👥 Collaborateurs</span>
                 <div className="cc-actions">
                   <input
                     className="input"
@@ -679,7 +683,6 @@ export default function AdminDashboard() {
                       <th>Statut</th>
                       <th>Arrivée</th>
                       <th>Départ théorique</th>
-                      <th>Temps restant</th>
                       <th>Départ réel</th>
                       <th>Durée</th>
                       <th>Action</th>
@@ -689,7 +692,6 @@ export default function AdminDashboard() {
                     {filtered.map((emp) => {
                       const t = emp.today;
                       const highlight = t.status === 'retard' || t.status === 'depart_en_attente';
-                      const remain = secondsToDeparture(tick, board.settings.departureTime);
                       return (
                         <tr
                           key={emp.matricule}
@@ -714,23 +716,12 @@ export default function AdminDashboard() {
                           </td>
                           <td className="num">{t.arrival || '—'}</td>
                           <td className="num">{board.settings.departureTime}</td>
-                          <td className="num">
-                            {!t.arrival ? (
-                              '—'
-                            ) : t.departure ? (
-                              <span className="muted">✓ Terminée</span>
-                            ) : remain <= 0 ? (
-                              <span className="countdown-done">En attente…</span>
-                            ) : (
-                              <Countdown departureTime={board.settings.departureTime} compact />
-                            )}
-                          </td>
                           <td className="num">{t.departure || '—'}</td>
                           <td className="num">{formatHm(workedMinutes(t, board.settings, tick))}</td>
                           <td>
                             <button
                               type="button"
-                              className="btn btn-ghost btn-sm"
+                              className="btn btn-soft btn-sm"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSelected(emp);
@@ -744,7 +735,7 @@ export default function AdminDashboard() {
                     })}
                     {filtered.length === 0 && (
                       <tr>
-                        <td colSpan={8}>
+                        <td colSpan={7}>
                           <div className="empty-state">
                             <div className="empty-icon" aria-hidden="true">🔍</div>
                             <div className="empty-title">Aucun employé ne correspond</div>
@@ -761,53 +752,92 @@ export default function AdminDashboard() {
         )}
 
         {tab === 'codes' && (
-          <div className="card card-pad">
-            <div className="row-between mb-2">
-              <div className="card-title" style={{ marginBottom: 0 }}>
-                Registre des codes individuels (à usage unique)
+          <div className="stack">
+            <div className="cc-card table-card">
+              <div className="table-head">
+                <span className="cc-card-title">🔑 Registre des codes individuels <span className="title-soft">— à usage unique</span></span>
+                <button type="button" className="btn btn-soft btn-sm" onClick={() => regenerate(null)}>
+                  Régénérer tout
+                </button>
               </div>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => regenerate(null)}>
-                Régénérer tout
-              </button>
-            </div>
-            <div className="table-wrap table-scroll">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Employé</th>
-                    <th>Matricule 3CX</th>
-                    <th>Code actuel</th>
-                    <th>Généré le</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {registry.map((r) => (
-                    <tr key={r.matricule}>
-                      <td style={{ fontWeight: 700 }}>{r.name}</td>
-                      <td className="num mono">{r.matricule}</td>
-                      <td>
-                        <span className="mono" style={{ fontSize: 16, fontWeight: 800, letterSpacing: '0.12em' }}>
-                          {r.code}
-                        </span>
-                      </td>
-                      <td className="small muted">
-                        {r.generatedAt ? new Date(r.generatedAt).toLocaleString('fr-FR') : '—'}
-                      </td>
-                      <td>
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => regenerate(r.matricule)}>
-                          Régénérer
-                        </button>
-                      </td>
+              <div className="table-scroll">
+                <table className="table table-sticky">
+                  <thead>
+                    <tr>
+                      <th>Employé</th>
+                      <th>Matricule 3CX</th>
+                      <th>Code actuel</th>
+                      <th>Statut</th>
+                      <th>Généré le</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {registry.map((r) => (
+                      <tr key={r.matricule}>
+                        <td>
+                          <div style={{ fontWeight: 700, color: 'var(--text-primary, #1c2333)' }}>{r.name}</div>
+                        </td>
+                        <td className="num mono">{r.matricule}</td>
+                        <td>
+                          <span className="code-display">{r.code}</span>
+                        </td>
+                        <td>
+                          <span className="status-badge badge-available">Disponible</span>
+                        </td>
+                        <td className="small muted">
+                          {r.generatedAt ? new Date(r.generatedAt).toLocaleString('fr-FR') : '—'}
+                        </td>
+                        <td>
+                          <div className="row" style={{ gap: 8 }}>
+                            <button
+                              type="button"
+                              className="btn btn-soft btn-sm"
+                              onClick={() => copyCode(r.code)}
+                              aria-label={`Copier le code de ${r.name}`}
+                            >
+                              {copiedCode === r.code ? '✓ Copié' : 'Copier'}
+                            </button>
+                            <button type="button" className="btn btn-soft btn-sm" onClick={() => regenerate(r.matricule)}>
+                              Régénérer
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="small muted" style={{ padding: '12px 20px 20px' }}>
+                Communiquez le code à l&apos;employé : après sa connexion, le code est consommé et un
+                nouveau code est généré automatiquement.
+              </p>
             </div>
-            <p className="small muted mt-2">
-              Communiquez le code à l&apos;employé : après sa connexion, le code est consommé et un
-              nouveau code est généré automatiquement.
-            </p>
+
+            <div className="cc-card">
+              <div className="cc-card-head">
+                <span className="cc-card-title">🗂 Derniers codes invalidés</span>
+              </div>
+              {codesHistory.length === 0 ? (
+                <div className="empty-state" style={{ padding: '18px 8px' }}>
+                  <div className="empty-title">Aucun code invalidé</div>
+                  <div className="empty-sub">Les codes consommés ou régénérés apparaîtront ici.</div>
+                </div>
+              ) : (
+                <div className="history-list">
+                  {codesHistory.map((h, i) => (
+                    <div key={`${h.code}-${i}`} className="history-row">
+                      <span className="mono num">{h.code}</span>
+                      <span className={`status-badge ${h.status === 'used' ? 'badge-used' : 'badge-revoked'}`}>
+                        {h.status === 'used' ? 'Utilisé' : 'Désactivé'}
+                      </span>
+                      <span className="small soft">{h.name || `3CX ${h.matricule}`} · 3CX {h.matricule}</span>
+                      <span className="small muted">{h.at ? new Date(h.at).toLocaleString('fr-FR') : '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -884,8 +914,7 @@ export default function AdminDashboard() {
         {tab === 'annuaire' && (
           <div className="cc-card table-card">
             <div className="table-head">
-              <span className="cc-card-title">👥 Employees List — profils réels synchronisés</span>
-              <LiveDot label="LIVE" lastSync={lastSync} />
+              <span className="cc-card-title">👥 Employees List <span className="title-soft">— profils réels du personnel</span></span>
             </div>
             <div style={{ padding: '0 20px 20px' }}>
               <EmployeesTable employees={board.employees} onSelect={setSelected} />
@@ -996,7 +1025,7 @@ export default function AdminDashboard() {
         onClose={() => setPaletteOpen(false)}
       />
       {supervision && (
-        <SupervisionMode counters={c} lastSync={lastSync} onClose={() => setSupervision(false)} />
+        <SupervisionMode counters={c} onClose={() => setSupervision(false)} />
       )}
       <Toasts toasts={toasts} onDismiss={dismissToast} />
     </>

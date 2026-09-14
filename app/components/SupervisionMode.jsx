@@ -2,7 +2,7 @@
 
 import { memo, useEffect } from 'react';
 import AnimatedNumber from './AnimatedNumber';
-import { LiveClock, LiveDot } from './primitives';
+import { LiveClock } from './primitives';
 
 // Mode supervision : affichage mural ultra-clair (données réelles uniquement).
 function Cell({ label, value, tone }) {
@@ -14,7 +14,7 @@ function Cell({ label, value, tone }) {
   );
 }
 
-function SupervisionMode({ counters, lastSync, onClose }) {
+function SupervisionMode({ counters, onClose }) {
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') onClose();
@@ -38,7 +38,6 @@ function SupervisionMode({ counters, lastSync, onClose }) {
             <div className="super-brand-sub">Mode supervision</div>
           </div>
         </div>
-        <LiveDot label="LIVE" lastSync={lastSync} />
         <button type="button" className="btn btn-ghost" onClick={onClose}>
           ✕ Quitter (Échap)
         </button>

@@ -1,7 +1,21 @@
 import { NextResponse } from 'next/server';
-import { seedIfEmpty, readStore, writeStore, requireAdmin, generateCode } from '@/lib/db';
+import { seedIfEmpty, readStore, writeStore, requireAdmin, generateUniqueCode, pushCodeHistory } from '@/lib/db';
 
-// GET /api/codes — registre des codes individuels (réservé administrateur)
+function serializeRegistry(employees, codes) {
+  return employees.map((emp) => ({
+    matricule: emp.matricule,
+    name: emp.name,
+    code: codes[emp.matricule]?.code || null,
+    generatedAt: codes[emp.matricule]?.generatedAt || null,
+  }));
+}
+
+async function getHistory(limit = 12) {
+  const history = await readStore('codesHistory');
+  return [...history].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, limit);
+}
+
+// GET /api/codes — registre des codes individuels + derniers codes invalidés (admin)
 export async function GET(request) {
   await seedIfEmpty();
   const admin = await requireAdmin(request);
@@ -10,13 +24,7 @@ export async function GET(request) {
   }
   const codes = await readStore('codes');
   const employees = await readStore('employees');
-  const registry = employees.map((emp) => ({
-    matricule: emp.matricule,
-    name: emp.name,
-    code: codes[emp.matricule]?.code || null,
-    generatedAt: codes[emp.matricule]?.generatedAt || null,
-  }));
-  return NextResponse.json({ registry });
+  return NextResponse.json({ registry: serializeRegistry(employees, codes), history: await getHistory() });
 }
 
 // POST /api/codes — régénération d'un code ({ matricule }) ou de tous ({ all: true })
@@ -37,24 +45,27 @@ export async function POST(request) {
   const employees = await readStore('employees');
   const generatedAt = new Date().toISOString();
 
+  async function rotate(matricule) {
+    const emp = employees.find((e) => e.matricule === matricule);
+    const old = codes[matricule]?.code;
+    if (old) {
+      await pushCodeHistory({ code: old, matricule, name: emp?.name || matricule, status: 'revoked' });
+    }
+    codes[matricule] = { code: generateUniqueCode(matricule, codes), generatedAt };
+  }
+
   if (body?.all) {
     for (const emp of employees) {
-      codes[emp.matricule] = { code: generateCode(), generatedAt };
+      await rotate(emp.matricule);
     }
   } else {
     const matricule = String(body?.matricule || '').trim();
     if (!employees.some((e) => e.matricule === matricule)) {
       return NextResponse.json({ error: 'Matricule inconnu.' }, { status: 404 });
     }
-    codes[matricule] = { code: generateCode(), generatedAt };
+    await rotate(matricule);
   }
 
   await writeStore('codes', codes);
-  const registry = employees.map((emp) => ({
-    matricule: emp.matricule,
-    name: emp.name,
-    code: codes[emp.matricule]?.code || null,
-    generatedAt: codes[emp.matricule]?.generatedAt || null,
-  }));
-  return NextResponse.json({ ok: true, registry });
+  return NextResponse.json({ ok: true, registry: serializeRegistry(employees, codes), history: await getHistory() });
 }

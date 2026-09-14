@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import Splash from './components/Splash';
-import { LiveClock, LiveDot } from './components/primitives';
+import { LiveClock } from './components/primitives';
 
 // Le splash ne joue qu'une seule fois par chargement de page :
 // un retour ultérieur sur l'accueil (bouton retour, navigation) ne le rejoue pas.
@@ -48,13 +48,10 @@ export default function HomePage() {
         </h1>
         <div className="home-slogan">Innover. Connecter. Performer.</div>
         <p className="hero-sub">
-          Pointage hebdomadaire du lundi au vendredi — arrivée, pauses, départ et suivi en temps réel.
+          Pointage hebdomadaire du lundi au vendredi — arrivée, pauses et départ, avec supervision centralisée.
         </p>
         <div className="home-clock">
           <LiveClock size="md" />
-        </div>
-        <div className="home-live">
-          <LiveDot label="SYSTÈME EN LIGNE" />
         </div>
       </section>
 
@@ -63,7 +60,7 @@ export default function HomePage() {
           <div className="portal-icon">🛡️</div>
           <div className="portal-title">Command Center</div>
           <p className="portal-desc">
-            Espace administrateur : supervision temps réel, registre des codes, notifications et
+            Espace administrateur : supervision centralisée, registre des codes, notifications et
             règles horaires.
           </p>
           <span className="btn">Accéder à l&apos;administration →</span>

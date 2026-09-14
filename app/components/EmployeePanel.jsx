@@ -129,7 +129,7 @@ function EmployeePanel({ emp, settings, onClose }) {
                     h.status === 'present' ? 'var(--success)'
                     : h.status === 'retard' ? 'var(--warn)'
                     : h.status === 'termine' ? 'var(--ink-faint)'
-                    : h.status === 'depart_en_attente' ? 'var(--info)'
+                    : h.status === 'depart_en_attente' ? '#5b6b8f'
                     : 'var(--danger)',
                 }}
               />

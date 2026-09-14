@@ -82,8 +82,8 @@ function PresenceFlow({ employees, settings, nowMinutes }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="flow-svg" role="img" aria-label="Évolution de la présence sur la journée">
         <defs>
           <linearGradient id="flowArea" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#611e93" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="#611e93" stopOpacity="0.02" />
+            <stop offset="0%" stopColor="#4a4e7a" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#4a4e7a" stopOpacity="0.02" />
           </linearGradient>
         </defs>
         {yTicks.map((v) => (

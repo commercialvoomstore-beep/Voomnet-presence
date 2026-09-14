@@ -71,16 +71,6 @@ export const Countdown = memo(function Countdown({ departureTime, compact = fals
   );
 });
 
-// Pastille LIVE à pulsation subtile
-export const LiveDot = memo(function LiveDot({ label = 'LIVE', lastSync = null }) {
-  return (
-    <span className="live-dot" title={lastSync ? `Dernière synchronisation : ${lastSync}` : 'Temps réel actif'}>
-      <span className="live-dot-pulse" aria-hidden="true" />
-      <span className="live-dot-label">{label}</span>
-      {lastSync && <span className="live-dot-sync">· sync {lastSync}</span>}
-    </span>
-  );
-});
 
 export function initials(name) {
   return String(name || '?')
