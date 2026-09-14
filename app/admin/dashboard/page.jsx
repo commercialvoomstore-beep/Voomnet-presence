@@ -1,71 +1,76 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { STATUS_LABELS, WEEKDAYS_FR } from '@/lib/rules';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  STATUS_LABELS,
+  WEEKDAYS_FR,
+  formatHm,
+  hhmmToMinutes,
+  isLate,
+  openPauseMinutes,
+  workedMinutes,
+} from '@/lib/rules';
+import AnimatedNumber from '@/app/components/AnimatedNumber';
+import CommandPalette from '@/app/components/CommandPalette';
+import DotGrid from '@/app/components/DotGrid';
+import EmployeePanel from '@/app/components/EmployeePanel';
+import EmployeesTable from '@/app/components/EmployeesTable';
+import KpiCard from '@/app/components/KpiCard';
+import LiveFeed from '@/app/components/LiveFeed';
+import PresenceFlow from '@/app/components/PresenceFlow';
+import PresenceRing from '@/app/components/PresenceRing';
+import SupervisionMode from '@/app/components/SupervisionMode';
+import Toasts from '@/app/components/Toasts';
+import { Countdown, LiveClock, initials, useNowTick } from '@/app/components/primitives';
 
 const STATUS_PILL = {
   present: 'pill-present',
   retard: 'pill-retard',
+  pause: 'pill-pause',
   absent: 'pill-absent',
   depart_en_attente: 'pill-attente',
   termine: 'pill-termine',
   weekend: 'pill-weekend',
 };
 
-function TopBar({ label, onLogout }) {
-  const [now, setNow] = useState(null);
-  useEffect(() => {
-    const tick = () => setNow(new Date());
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
+const FILTERS = [
+  ['all', 'Tous'],
+  ['present', 'Présents'],
+  ['absent', 'Absents'],
+  ['retard', 'En retard'],
+  ['pause', 'En pause'],
+  ['depart_en_attente', 'Départs en attente'],
+  ['termine', 'Journée terminée'],
+];
+
+function TopBar({ label, onOpenPalette, onSupervision, onLogout }) {
   return (
     <header className="topbar">
-      <div className="container topbar-inner">
-        <div className="brand">
-          <div className="brand-mark">VP</div>
+      <div className="container container-wide topbar-inner">
+        <div className="brand-logo">
+          <img src="/voomnet-mark.svg" alt="VOOMNET" width="38" height="38" />
           <div>
             <div className="brand-name">VOOMNET Presence</div>
             <div className="brand-sub">Command Center</div>
           </div>
         </div>
-        <div className="row">
-          <div className="clock">
-            <div className="clock-time">
-              {now ? now.toLocaleTimeString('fr-FR', { timeZone: 'Africa/Abidjan', hour12: false }) : '--:--:--'}
-            </div>
-            <div className="clock-date">
-              {now
-                ? now.toLocaleDateString('fr-FR', {
-                    timeZone: 'Africa/Abidjan',
-                    weekday: 'long',
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                  })
-                : '…'}
-            </div>
-          </div>
-          <span className="pill pill-attente">{label}</span>
-          <button className="btn btn-ghost btn-sm" onClick={onLogout}>
+        <div className="row" style={{ gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button type="button" className="search-btn" onClick={onOpenPalette} aria-label="Rechercher un employé">
+            ⌘K Rechercher…
+          </button>
+          <LiveClock showDate={false} />
+          <span className="role-pill">{label}</span>
+          <button type="button" className="btn btn-violet btn-sm" onClick={onSupervision}>
+            👁 Supervision
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onLogout}>
             Déconnexion
           </button>
         </div>
       </div>
     </header>
   );
-}
-
-function initials(name) {
-  return String(name || '?')
-    .split(/\s+/)
-    .map((w) => w[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 }
 
 export default function AdminDashboard() {
@@ -76,24 +81,30 @@ export default function AdminDashboard() {
   const [board, setBoard] = useState(null);
   const [registry, setRegistry] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [codesHistory, setCodesHistory] = useState([]);
+  const [copiedCode, setCopiedCode] = useState(null);
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [banner, setBanner] = useState(null); // {type:'ok'|'error', text}
+  const [banner, setBanner] = useState(null);
+  const [boardError, setBoardError] = useState(false);
+  const [supervision, setSupervision] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [toasts, setToasts] = useState([]);
+  const [prevCounters, setPrevCounters] = useState(null);
 
-  // Paramètres (formulaire)
   const [settingsForm, setSettingsForm] = useState(null);
   const [settingsMsg, setSettingsMsg] = useState(null);
-
-  // Notification (formulaire)
   const [notifTarget, setNotifTarget] = useState('all');
   const [notifMessage, setNotifMessage] = useState('');
   const [notifMsg, setNotifMsg] = useState(null);
 
-  const authHeaders = useCallback(
-    () => ({ 'x-admin-token': token || '' }),
-    [token]
-  );
+  const prevSnap = useRef(null);
+  const countersRef = useRef(null);
+  const toastId = useRef(0);
+  const tick = useNowTick(1000);
+
+  const authHeaders = useCallback(() => ({ 'x-admin-token': token || '' }), [token]);
 
   const flash = useCallback((type, text) => {
     setBanner({ type, text });
@@ -106,7 +117,18 @@ export default function AdminDashboard() {
     router.push('/admin');
   }, [router]);
 
-  // Garde d'accès
+  const pushToast = useCallback((tone, title, message) => {
+    const id = `t${Date.now()}-${toastId.current++}`;
+    setToasts((list) => [...list.slice(-3), { id, tone, title, message }]);
+    setTimeout(() => {
+      setToasts((list) => list.filter((t) => t.id !== id));
+    }, 6500);
+  }, []);
+
+  const dismissToast = useCallback((id) => {
+    setToasts((list) => list.filter((t) => t.id !== id));
+  }, []);
+
   useEffect(() => {
     const t = localStorage.getItem('vp_admin');
     if (!t) {
@@ -117,25 +139,92 @@ export default function AdminDashboard() {
     setLabel(localStorage.getItem('vp_admin_label') || 'Admin');
   }, [router]);
 
+  // Raccourci ⌘K / Ctrl+K
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Détection des changements réels -> toasts live (aucune donnée simulée)
+  const diffAndNotify = useCallback(
+    (employees, settings) => {
+      const snap = {};
+      for (const e of employees) {
+        const pauses = e.today.pauses || [];
+        const last = pauses[pauses.length - 1];
+        snap[e.matricule] = {
+          arrival: e.today.arrival,
+          departure: e.today.departure,
+          pauses: pauses.length,
+          openPause: !!(last && last.start && !last.end),
+          status: e.today.status,
+        };
+      }
+      const prev = prevSnap.current;
+      prevSnap.current = snap;
+      if (!prev) return;
+      for (const e of employees) {
+        const p = prev[e.matricule];
+        const s = snap[e.matricule];
+        if (!p) continue;
+        if (!p.arrival && s.arrival) {
+          const late = isLate(s.arrival, settings);
+          pushToast(
+            late ? 'warn' : 'success',
+            late ? `${e.name} est en retard` : `${e.name} vient d'arriver`,
+            late ? `Arrivée tardive à ${s.arrival}.` : `Arrivée enregistrée à ${s.arrival}.`
+          );
+        }
+        if (!p.departure && s.departure) {
+          pushToast('success', `${e.name} a terminé sa journée`, `Départ enregistré à ${s.departure}.`);
+        }
+        if (!p.openPause && s.openPause) {
+          pushToast('info', `${e.name} est en pause`, 'Début de pause enregistré.');
+        }
+        if (p.openPause && !s.openPause && s.pauses >= p.pauses) {
+          pushToast('info', `${e.name} est de retour`, 'Fin de pause enregistrée.');
+        }
+        if (p.status !== 'depart_en_attente' && s.status === 'depart_en_attente') {
+          pushToast('warn', `Départ attendu : ${e.name}`, `L'heure théorique (${settings.departureTime}) est dépassée.`);
+        }
+      }
+    },
+    [pushToast]
+  );
+
   const loadBoard = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await fetch('/api/attendance', { headers: authHeaders() });
+      const res = await fetch('/api/attendance', { headers: { 'x-admin-token': token } });
       if (res.status === 401) return logout();
+      if (!res.ok) throw new Error('load-failed');
       const data = await res.json();
+      setPrevCounters(countersRef.current);
+      countersRef.current = data.counters;
       setBoard(data);
+      diffAndNotify(data.employees, data.settings);
+      setBoardError(false);
       setSelected((sel) =>
         sel ? data.employees.find((e) => e.matricule === sel.matricule) || null : null
       );
     } catch {
-      /* réseau : réessai au prochain cycle */
+      setBoardError(true);
     }
-  }, [token, authHeaders, logout]);
+  }, [token, logout, diffAndNotify]);
 
   const loadCodes = useCallback(async () => {
     if (!token) return;
     const res = await fetch('/api/codes', { headers: authHeaders() });
-    if (res.ok) setRegistry((await res.json()).registry);
+    if (!res.ok) return;
+    const data = await res.json();
+    setRegistry(data.registry);
+    setCodesHistory(data.history || []);
   }, [token, authHeaders]);
 
   const loadNotifications = useCallback(async () => {
@@ -149,7 +238,6 @@ export default function AdminDashboard() {
     if (res.ok) setSettingsForm((await res.json()).settings);
   }, []);
 
-  // Supervision automatique : rafraîchissement périodique
   useEffect(() => {
     loadBoard();
     const id = setInterval(loadBoard, 5000);
@@ -176,6 +264,126 @@ export default function AdminDashboard() {
     });
   }, [board, search, statusFilter]);
 
+  // Événements réels du jour pour le flux live
+  const events = useMemo(() => {
+    if (!board) return [];
+    const list = [];
+    for (const e of board.employees) {
+      const t = e.today;
+      if (t.arrival) {
+        const late = isLate(t.arrival, board.settings);
+        list.push({
+          id: `${e.matricule}-arr`,
+          time: t.arrival,
+          name: e.name,
+          message: late ? 'Arrivée tardive enregistrée' : 'Arrivée enregistrée',
+          tone: late ? 'warn' : 'success',
+        });
+      }
+      (t.pauses || []).forEach((p, i) => {
+        list.push({
+          id: `${e.matricule}-ps${i}`,
+          time: p.start,
+          name: e.name,
+          message: 'Début de pause',
+          tone: 'info',
+        });
+        if (p.end) {
+          list.push({
+            id: `${e.matricule}-pe${i}`,
+            time: p.end,
+            name: e.name,
+            message: 'Retour de pause',
+            tone: 'info',
+          });
+        }
+      });
+      if (t.departure) {
+        list.push({
+          id: `${e.matricule}-dep`,
+          time: t.departure,
+          name: e.name,
+          message: `Départ enregistré à ${t.departure}`,
+          tone: 'violet',
+        });
+      }
+    }
+    return list.sort((a, b) => (a.time < b.time ? 1 : -1)).slice(0, 9);
+  }, [board]);
+
+  // Alertes réelles : retards, attentes, absents, pauses longues
+  const attention = useMemo(() => {
+    if (!board) return [];
+    const items = [];
+    const c = board.counters;
+    if (c.retards > 0) {
+      items.push({
+        key: 'retard',
+        tone: 'warn',
+        num: c.retards,
+        label: c.retards > 1 ? 'employés en retard' : 'employé en retard',
+        filter: 'retard',
+      });
+    }
+    if (c.departs_en_attente > 0) {
+      items.push({
+        key: 'attente',
+        tone: 'violet',
+        num: c.departs_en_attente,
+        label: c.departs_en_attente > 1 ? 'départs en attente' : 'départ en attente',
+        filter: 'depart_en_attente',
+      });
+    }
+    const lateThreshold =
+      hhmmToMinutes(board.settings.arrivalTime) + Number(board.settings.toleranceMinutes || 0);
+    if (board.isWorkday && c.absents > 0 && tick.minutes > lateThreshold) {
+      items.push({
+        key: 'absent',
+        tone: 'danger',
+        num: c.absents,
+        label: c.absents > 1 ? 'absents à surveiller' : 'absent à surveiller',
+        filter: 'absent',
+      });
+    }
+    const longPauses = board.employees.filter(
+      (e) => e.today.status === 'pause' && openPauseMinutes(e.today, tick) >= 45
+    ).length;
+    if (longPauses > 0) {
+      items.push({
+        key: 'pause',
+        tone: 'info',
+        num: longPauses,
+        label: longPauses > 1 ? 'pauses longues (≥ 45 min)' : 'pause longue (≥ 45 min)',
+        filter: 'pause',
+      });
+    }
+    return items;
+  }, [board, tick]);
+
+  const counts = useMemo(() => {
+    const m = { all: board?.employees.length || 0 };
+    for (const [key] of FILTERS) {
+      if (key === 'all') continue;
+      m[key] = board ? board.employees.filter((e) => e.today.status === key).length : 0;
+    }
+    return m;
+  }, [board]);
+
+  async function copyCode(code) {
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = code;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode((c) => (c === code ? null : c)), 1600);
+  }
+
   async function regenerate(matricule) {
     const res = await fetch('/api/codes', {
       method: 'POST',
@@ -185,6 +393,7 @@ export default function AdminDashboard() {
     if (res.ok) {
       const data = await res.json();
       setRegistry(data.registry);
+      setCodesHistory(data.history || []);
       flash('ok', matricule ? `Code régénéré pour ${matricule}.` : 'Tous les codes ont été régénérés.');
     } else {
       flash('error', 'Régénération impossible.');
@@ -236,28 +445,81 @@ export default function AdminDashboard() {
   }
 
   const c = board.counters;
+  const total = board.employees.length;
+  const arrived = c.presents + c.retards + (c.pauses || 0) + c.departs_en_attente + c.terminees;
+  const onSite = c.presents + c.retards + (c.pauses || 0) + c.departs_en_attente;
+  const rate = total === 0 ? 0 : Math.round((arrived / total) * 100);
+  const hour = tick.minutes / 60;
+  const greeting = hour < 18 ? 'Bonjour' : 'Bonsoir';
+  const dateLong = new Date()
+    .toLocaleDateString('fr-FR', {
+      timeZone: 'Africa/Abidjan',
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })
+    .toUpperCase();
+
+  const delta = (key) => (prevCounters ? (c[key] || 0) - (prevCounters[key] || 0) : 0);
+
+  // Clôture réelle : jour ouvré + tous les arrivés sont partis + heure théorique passée
+  const depTarget = hhmmToMinutes(board.settings.departureTime);
+  const closed =
+    board.isWorkday && arrived > 0 && arrived === c.terminees && tick.minutes >= depTarget;
+  const avgWorked = (() => {
+    if (!closed) return null;
+    const vals = board.employees
+      .map((e) => workedMinutes(e.today, board.settings, tick))
+      .filter((v) => v !== null);
+    if (vals.length === 0) return null;
+    return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+  })();
+
+  const focusFilter = (filter) => {
+    setTab('supervision');
+    setStatusFilter(filter);
+    setTimeout(() => {
+      document.getElementById('cc-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  };
 
   return (
     <>
-      <TopBar label={label} onLogout={logout} />
-      <main className="container page">
+      <TopBar
+        label={label}
+        onOpenPalette={() => setPaletteOpen(true)}
+        onSupervision={() => setSupervision(true)}
+        onLogout={logout}
+      />
+      <main className="container container-wide page">
         {banner && <div className={`alert ${banner.type === 'ok' ? 'alert-ok' : 'alert-error'} mb-2`}>{banner.text}</div>}
         {!board.isWorkday && (
           <div className="alert alert-info mb-2">
             Aujourd&apos;hui n&apos;est pas un jour ouvré configuré — le pointage est désactivé.
           </div>
         )}
+        {boardError && (
+          <div className="error-state mb-2">
+            <div className="empty-title">⚠ Données momentanément indisponibles</div>
+            <div className="empty-sub">Vérifiez votre connexion puis réessayez.</div>
+            <button type="button" className="btn btn-sm mt-1" onClick={loadBoard}>
+              Réessayer
+            </button>
+          </div>
+        )}
 
-        <nav className="tabs">
+        <nav className="tabs" aria-label="Navigation du Command Center">
           {[
             ['supervision', 'Supervision'],
             ['codes', 'Registre des codes'],
             ['notifications', 'Notifications'],
-            ['annuaire', 'Annuaire'],
+            ['annuaire', 'Employés'],
             ['parametres', 'Paramètres'],
           ].map(([key, lbl]) => (
             <button
               key={key}
+              type="button"
               className={`tab ${tab === key ? 'tab-active' : ''}`}
               onClick={() => setTab(key)}
             >
@@ -267,62 +529,154 @@ export default function AdminDashboard() {
         </nav>
 
         {tab === 'supervision' && (
-          <div className="stack">
-            <div className="stats">
-              <div className="stat stat-present">
-                <div className="stat-value">{c.presents}</div>
-                <div className="stat-label">Présents</div>
+          <div>
+            {closed && (
+              <div className="closed-banner">
+                <div className="closed-badge">✓</div>
+                <div>
+                  <div className="closed-title">Journée clôturée</div>
+                  <div className="closed-sub">
+                    Présence finale {rate} % ({arrived}/{total}) · {c.terminees} départ
+                    {c.terminees > 1 ? 's' : ''} enregistré{c.terminees > 1 ? 's' : ''} ·{' '}
+                    {c.retards} retard{c.retards > 1 ? 's' : ''}
+                    {avgWorked !== null && <> · durée moyenne {formatHm(avgWorked)}</>}
+                  </div>
+                </div>
               </div>
-              <div className="stat stat-retard">
-                <div className="stat-value">{c.retards}</div>
-                <div className="stat-label">En retard</div>
+            )}
+
+            {/* HERO */}
+            <div className="cc-hero">
+              <div className="cc-hero-main fade-up">
+                <div className="cc-greeting">{greeting}, Administrateur 👋</div>
+                <h1 className="cc-title">Centre de contrôle de présence</h1>
+                <div className="cc-sub">Supervision des présences — fuseau Africa/Abidjan</div>
+                <div className="cc-meta">
+                  <span className="cc-date">{dateLong}</span>
+                  <LiveClock showDate={false} />
+                </div>
               </div>
-              <div className="stat stat-absent">
-                <div className="stat-value">{c.absents}</div>
-                <div className="stat-label">Absents</div>
-              </div>
-              <div className="stat stat-attente">
-                <div className="stat-value">{c.departs_en_attente}</div>
-                <div className="stat-label">Départs en attente</div>
-              </div>
-              <div className="stat stat-termine">
-                <div className="stat-value">{c.terminees}</div>
-                <div className="stat-label">Journées terminées</div>
+              <div className="cc-hero-side fade-up" style={{ animationDelay: '80ms' }}>
+                <PresenceRing rate={board.isWorkday ? rate : 0} size={168} stroke={15} />
+                <div className="hero-stats">
+                  <div className="hs-row">
+                    <span className="hs-num"><AnimatedNumber value={arrived} /></span>
+                    <span className="hs-lbl">arrivée{arrived > 1 ? 's' : ''} sur {total} collaborateur{total > 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="hs-row">
+                    <span className="hs-num"><AnimatedNumber value={onSite} /></span>
+                    <span className="hs-lbl">encore sur site</span>
+                  </div>
+                  <div className="hs-row">
+                    <span className="hs-num"><AnimatedNumber value={c.terminees} /></span>
+                    <span className="hs-lbl">journée{c.terminees > 1 ? 's' : ''} terminée{c.terminees > 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="hero-evo">
+                    {board.isWorkday ? `Évolution depuis ce matin : +${arrived}` : 'Hors jour ouvré — aucune activité attendue.'}
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="card card-pad">
-              <div className="row-between mb-2">
-                <div className="row">
+            {/* KPI */}
+            <div className="kpi-grid">
+              <KpiCard icon="🟢" label="Présents" value={c.presents} hint="Sur site" tone="success" delta={delta('presents')} index={0} onClick={() => focusFilter('present')} />
+              <KpiCard icon="🔴" label="Absents" value={c.absents} hint="À surveiller" tone="danger" delta={delta('absents')} index={1} onClick={() => focusFilter('absent')} />
+              <KpiCard icon="🟠" label="En retard" value={c.retards} hint="Attention requise" tone="warn" delta={delta('retards')} index={2} onClick={() => focusFilter('retard')} />
+              <KpiCard icon="🔵" label="En pause" value={c.pauses || 0} hint="Actuellement" tone="info" delta={delta('pauses')} index={3} onClick={() => focusFilter('pause')} />
+              <KpiCard icon="🟣" label="Départs en attente" value={c.departs_en_attente} hint="Après l'heure théorique" tone="violet" delta={delta('departs_en_attente')} index={4} onClick={() => focusFilter('depart_en_attente')} />
+              <div className="kpi kpi-navy fade-up" style={{ animationDelay: '300ms' }} aria-label={`Prochain départ théorique : ${board.settings.departureTime}`}>
+                <span className="kpi-icon" aria-hidden="true">🕐</span>
+                <span className="kpi-body">
+                  <span className="kpi-label">Prochain départ</span>
+                  <span className="kpi-value num">{board.settings.departureTime}</span>
+                  <span className="kpi-hint"><Countdown departureTime={board.settings.departureTime} compact /></span>
+                </span>
+              </div>
+            </div>
+
+            {/* FLUX + ATTENTION + STATUS */}
+            <div className="cc-grid-3">
+              <div className="cc-card fade-up" style={{ animationDelay: '120ms' }}>
+                <div className="cc-card-head">
+                  <span className="cc-card-title">⚠ Actions requises</span>
+                </div>
+                {attention.length === 0 ? (
+                  <div className="attention-ok">✓ Tout est sous contrôle — aucune action requise.</div>
+                ) : (
+                  <div className="attention-grid">
+                    {attention.map((a) => (
+                      <div key={a.key} className={`attention-card ${a.tone}`}>
+                        <span className="attention-num"><AnimatedNumber value={a.num} /></span>
+                        <span className="attention-label">{a.label}</span>
+                        <button type="button" className="attention-link" onClick={() => focusFilter(a.filter)}>
+                          Voir → Superviser
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="cc-card fade-up" style={{ animationDelay: '180ms' }}>
+                <div className="cc-card-head">
+                  <span className="cc-card-title">🕘 Activité récente</span>
+                </div>
+                <LiveFeed events={events} />
+              </div>
+              <div className="cc-card fade-up" style={{ animationDelay: '240ms' }}>
+                <div className="cc-card-head">
+                  <span className="cc-card-title">👥 Qui est présent ?</span>
+                </div>
+                <DotGrid employees={board.employees} departureTime={board.settings.departureTime} onSelect={setSelected} />
+              </div>
+            </div>
+
+            {/* GRAPHIQUE */}
+            <div className="cc-card mb-2 fade-up" style={{ animationDelay: '200ms' }}>
+              <div className="cc-card-head">
+                <span className="cc-card-title">📈 Évolution de la présence</span>
+                <span className="small muted">Données du jour · {board.now.date}</span>
+              </div>
+              <PresenceFlow employees={board.employees} settings={board.settings} nowMinutes={tick.minutes} />
+            </div>
+
+            {/* TABLEAU LIVE VIEW */}
+            <div className="cc-card table-card fade-up" id="cc-table" style={{ animationDelay: '260ms' }}>
+              <div className="table-head">
+                <span className="cc-card-title">👥 Collaborateurs</span>
+                <div className="cc-actions">
                   <input
                     className="input"
-                    style={{ maxWidth: 260 }}
+                    style={{ maxWidth: 240 }}
                     placeholder="Rechercher (nom ou matricule)…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
+                    aria-label="Rechercher un employé"
                   />
-                  <select
-                    className="select"
-                    style={{ maxWidth: 220 }}
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
-                    <option value="all">Tous les statuts</option>
-                    {Object.entries(STATUS_LABELS).map(([k, v]) => (
-                      <option key={k} value={k}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
+                  <button type="button" className="search-btn" style={{ minWidth: 0 }} onClick={() => setPaletteOpen(true)}>
+                    ⌘K
+                  </button>
                 </div>
-                <span className="small muted">
-                  Arrivée {board.settings.arrivalTime} · tolérance {board.settings.toleranceMinutes} min ·
-                  départ {board.settings.departureTime} · rafraîchi toutes les 5 s
-                </span>
               </div>
-
-              <div className="table-wrap">
-                <table className="table">
+              <div style={{ padding: '0 20px 12px' }}>
+                <div className="chips" role="tablist" aria-label="Filtrer par statut">
+                  {FILTERS.map(([key, lbl]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      role="tab"
+                      aria-selected={statusFilter === key}
+                      className={`chip ${statusFilter === key ? 'chip-active' : ''}`}
+                      onClick={() => setStatusFilter(key)}
+                    >
+                      {lbl}
+                      <span className="chip-count">{counts[key] ?? 0}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="table-scroll">
+                <table className="table table-sticky">
                   <thead>
                     <tr>
                       <th>Employé</th>
@@ -330,42 +684,63 @@ export default function AdminDashboard() {
                       <th>Arrivée</th>
                       <th>Départ théorique</th>
                       <th>Départ réel</th>
-                      <th></th>
+                      <th>Durée</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((emp) => (
-                      <tr key={emp.matricule}>
-                        <td>
-                          <div className="row">
-                            <div className="avatar">
-                              {emp.photo ? <img src={emp.photo} alt="" /> : initials(emp.name)}
+                    {filtered.map((emp) => {
+                      const t = emp.today;
+                      const highlight = t.status === 'retard' || t.status === 'depart_en_attente';
+                      return (
+                        <tr
+                          key={emp.matricule}
+                          className={`${highlight ? 'row-attention' : ''} ${selected?.matricule === emp.matricule ? 'row-selected' : ''} clickable-row`}
+                          onClick={() => setSelected(emp)}
+                        >
+                          <td>
+                            <div className="row">
+                              <div className="avatar">
+                                {emp.photo ? <img src={emp.photo} alt="" /> : initials(emp.name)}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 700 }}>{emp.name}</div>
+                                <div className="small muted mono">3CX {emp.matricule}</div>
+                              </div>
                             </div>
-                            <div>
-                              <div style={{ fontWeight: 700 }}>{emp.name}</div>
-                              <div className="small muted mono">3CX {emp.matricule}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={`pill ${STATUS_PILL[emp.today.status]}`}>
-                            {STATUS_LABELS[emp.today.status]}
-                          </span>
-                        </td>
-                        <td className="num">{emp.today.arrival || '—'}</td>
-                        <td className="num">{board.settings.departureTime}</td>
-                        <td className="num">{emp.today.departure || '—'}</td>
-                        <td>
-                          <button className="btn btn-ghost btn-sm" onClick={() => setSelected(emp)}>
-                            Détails
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td>
+                            <span className={`pill ${STATUS_PILL[t.status]}`}>
+                              {STATUS_LABELS[t.status]}
+                            </span>
+                          </td>
+                          <td className="num">{t.arrival || '—'}</td>
+                          <td className="num">{board.settings.departureTime}</td>
+                          <td className="num">{t.departure || '—'}</td>
+                          <td className="num">{formatHm(workedMinutes(t, board.settings, tick))}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="btn btn-soft btn-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelected(emp);
+                              }}
+                            >
+                              Détails
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {filtered.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="muted" style={{ textAlign: 'center', padding: 24 }}>
-                          Aucun employé ne correspond à la recherche.
+                        <td colSpan={7}>
+                          <div className="empty-state">
+                            <div className="empty-icon" aria-hidden="true">🔍</div>
+                            <div className="empty-title">Aucun employé ne correspond</div>
+                            <div className="empty-sub">Modifiez la recherche ou les filtres.</div>
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -373,118 +748,101 @@ export default function AdminDashboard() {
                 </table>
               </div>
             </div>
-
-            {selected && (
-              <div className="card card-pad">
-                <div className="row-between mb-2">
-                  <div className="card-title" style={{ marginBottom: 0 }}>
-                    Panneau détaillé — {selected.name} (3CX {selected.matricule})
-                  </div>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setSelected(null)}>
-                    Fermer
-                  </button>
-                </div>
-                <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-                  <div>
-                    <div className="small muted">Statut du jour</div>
-                    <div className="mt-1">
-                      <span className={`pill ${STATUS_PILL[selected.today.status]}`}>
-                        {STATUS_LABELS[selected.today.status]}
-                      </span>
-                    </div>
-                    <div className="small muted mt-2">Département</div>
-                    <div>{selected.department}</div>
-                    <div className="small muted mt-1">Date d&apos;inscription</div>
-                    <div>{selected.registeredAt}</div>
-                  </div>
-                  <div>
-                    <div className="small muted">Arrivée</div>
-                    <div className="countdown" style={{ fontSize: 22 }}>
-                      {selected.today.arrival || '—'}
-                    </div>
-                    <div className="small muted mt-1">Départ réel</div>
-                    <div className="countdown" style={{ fontSize: 22 }}>
-                      {selected.today.departure || '—'}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="small muted mb-1">Historique (7 derniers jours)</div>
-                    {selected.history.length === 0 && <div className="small muted">Aucun pointage.</div>}
-                    {selected.history.map((h) => (
-                      <div key={h.date} className="small num" style={{ padding: '3px 0' }}>
-                        <span className={`history-dot ${STATUS_PILL[h.status].replace('pill-', '') === 'present' ? '' : ''}`}
-                          style={{
-                            background:
-                              h.status === 'present' ? 'var(--success)'
-                              : h.status === 'retard' ? 'var(--warn)'
-                              : h.status === 'termine' ? 'var(--ink-faint)'
-                              : h.status === 'depart_en_attente' ? 'var(--info)'
-                              : 'var(--danger)',
-                          }}
-                        />
-                        {h.date} · ↑ {h.arrival || '—'} · ↓ {h.departure || '—'}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
         {tab === 'codes' && (
-          <div className="card card-pad">
-            <div className="row-between mb-2">
-              <div className="card-title" style={{ marginBottom: 0 }}>
-                Registre des codes individuels (à usage unique)
+          <div className="stack">
+            <div className="cc-card table-card">
+              <div className="table-head">
+                <span className="cc-card-title">🔑 Registre des codes individuels <span className="title-soft">— à usage unique</span></span>
+                <button type="button" className="btn btn-soft btn-sm" onClick={() => regenerate(null)}>
+                  Régénérer tout
+                </button>
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => regenerate(null)}>
-                Régénérer tout
-              </button>
-            </div>
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Employé</th>
-                    <th>Matricule 3CX</th>
-                    <th>Code actuel</th>
-                    <th>Généré le</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {registry.map((r) => (
-                    <tr key={r.matricule}>
-                      <td style={{ fontWeight: 700 }}>{r.name}</td>
-                      <td className="num mono">{r.matricule}</td>
-                      <td>
-                        <span className="mono" style={{ fontSize: 16, fontWeight: 800, letterSpacing: '0.12em' }}>
-                          {r.code}
-                        </span>
-                      </td>
-                      <td className="small muted">
-                        {r.generatedAt ? new Date(r.generatedAt).toLocaleString('fr-FR') : '—'}
-                      </td>
-                      <td>
-                        <button className="btn btn-ghost btn-sm" onClick={() => regenerate(r.matricule)}>
-                          Régénérer
-                        </button>
-                      </td>
+              <div className="table-scroll">
+                <table className="table table-sticky">
+                  <thead>
+                    <tr>
+                      <th>Employé</th>
+                      <th>Matricule 3CX</th>
+                      <th>Code actuel</th>
+                      <th>Statut</th>
+                      <th>Généré le</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {registry.map((r) => (
+                      <tr key={r.matricule}>
+                        <td>
+                          <div style={{ fontWeight: 700, color: 'var(--text-primary, #1c2333)' }}>{r.name}</div>
+                        </td>
+                        <td className="num mono">{r.matricule}</td>
+                        <td>
+                          <span className="code-display">{r.code}</span>
+                        </td>
+                        <td>
+                          <span className="status-badge badge-available">Disponible</span>
+                        </td>
+                        <td className="small muted">
+                          {r.generatedAt ? new Date(r.generatedAt).toLocaleString('fr-FR') : '—'}
+                        </td>
+                        <td>
+                          <div className="row" style={{ gap: 8 }}>
+                            <button
+                              type="button"
+                              className="btn btn-soft btn-sm"
+                              onClick={() => copyCode(r.code)}
+                              aria-label={`Copier le code de ${r.name}`}
+                            >
+                              {copiedCode === r.code ? '✓ Copié' : 'Copier'}
+                            </button>
+                            <button type="button" className="btn btn-soft btn-sm" onClick={() => regenerate(r.matricule)}>
+                              Régénérer
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="small muted" style={{ padding: '12px 20px 20px' }}>
+                Communiquez le code à l&apos;employé : après sa connexion, le code est consommé et un
+                nouveau code est généré automatiquement.
+              </p>
             </div>
-            <p className="small muted mt-2">
-              Communiquez le code à l&apos;employé : après sa connexion, le code est consommé et un
-              nouveau code est généré automatiquement.
-            </p>
+
+            <div className="cc-card">
+              <div className="cc-card-head">
+                <span className="cc-card-title">🗂 Derniers codes invalidés</span>
+              </div>
+              {codesHistory.length === 0 ? (
+                <div className="empty-state" style={{ padding: '18px 8px' }}>
+                  <div className="empty-title">Aucun code invalidé</div>
+                  <div className="empty-sub">Les codes consommés ou régénérés apparaîtront ici.</div>
+                </div>
+              ) : (
+                <div className="history-list">
+                  {codesHistory.map((h, i) => (
+                    <div key={`${h.code}-${i}`} className="history-row">
+                      <span className="mono num">{h.code}</span>
+                      <span className={`status-badge ${h.status === 'used' ? 'badge-used' : 'badge-revoked'}`}>
+                        {h.status === 'used' ? 'Utilisé' : 'Désactivé'}
+                      </span>
+                      <span className="small soft">{h.name || `3CX ${h.matricule}`} · 3CX {h.matricule}</span>
+                      <span className="small muted">{h.at ? new Date(h.at).toLocaleString('fr-FR') : '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {tab === 'notifications' && (
-          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', alignItems: 'start' }}>
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', alignItems: 'start' }}>
             <div className="card card-pad">
               <div className="card-title">Nouvelle notification</div>
               <form onSubmit={sendNotification} className="stack">
@@ -527,7 +885,13 @@ export default function AdminDashboard() {
 
             <div className="card card-pad">
               <div className="card-title">Historique des envois</div>
-              {notifications.length === 0 && <div className="small muted">Aucune notification envoyée.</div>}
+              {notifications.length === 0 && (
+                <div className="empty-state">
+                  <div className="empty-icon" aria-hidden="true">✉️</div>
+                  <div className="empty-title">Aucune notification envoyée</div>
+                  <div className="empty-sub">Les envois apparaîtront ici.</div>
+                </div>
+              )}
               <div className="stack" style={{ gap: 10 }}>
                 {notifications.map((n) => (
                   <div key={n.id} className="notif">
@@ -548,30 +912,13 @@ export default function AdminDashboard() {
         )}
 
         {tab === 'annuaire' && (
-          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-            {board.employees.map((emp) => (
-              <div key={emp.matricule} className="card card-pad">
-                <div className="row" style={{ gap: 14 }}>
-                  <div className="avatar avatar-lg">
-                    {emp.photo ? <img src={emp.photo} alt="" /> : initials(emp.name)}
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: 16 }}>{emp.name}</div>
-                    <div className="small muted mono">3CX {emp.matricule}</div>
-                    <div className="mt-1">
-                      <span className={`pill ${STATUS_PILL[emp.today.status]}`}>
-                        {STATUS_LABELS[emp.today.status]}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-2 small soft">
-                  Département : {emp.department}
-                  <br />
-                  Inscrit le : {emp.registeredAt}
-                </div>
-              </div>
-            ))}
+          <div className="cc-card table-card">
+            <div className="table-head">
+              <span className="cc-card-title">👥 Employees List <span className="title-soft">— profils réels du personnel</span></span>
+            </div>
+            <div style={{ padding: '0 20px 20px' }}>
+              <EmployeesTable employees={board.employees} onSelect={setSelected} />
+            </div>
           </div>
         )}
 
@@ -662,6 +1009,25 @@ export default function AdminDashboard() {
           </div>
         )}
       </main>
+
+      {selected && (tab === 'supervision' || tab === 'annuaire') && (
+        <EmployeePanel emp={selected} settings={board.settings} onClose={() => setSelected(null)} />
+      )}
+      <CommandPalette
+        open={paletteOpen}
+        employees={board.employees}
+        departureTime={board.settings.departureTime}
+        onSelect={(emp) => {
+          setSelected(emp);
+          setPaletteOpen(false);
+          setTab('supervision');
+        }}
+        onClose={() => setPaletteOpen(false)}
+      />
+      {supervision && (
+        <SupervisionMode counters={c} onClose={() => setSupervision(false)} />
+      )}
+      <Toasts toasts={toasts} onDismiss={dismissToast} />
     </>
   );
 }

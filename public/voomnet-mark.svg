@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="VOOMNET">
+  <!-- Carré haut-gauche : bleu marine -->
+  <rect x="4" y="4" width="90" height="90" rx="26" fill="#1a1a63"/>
+  <rect x="64" y="18" width="7" height="62" rx="3.5" fill="#ffffff"/>
+  <!-- Carré haut-droit : violet -->
+  <rect x="106" y="4" width="90" height="90" rx="26" fill="#611e93"/>
+  <rect x="166" y="18" width="7" height="62" rx="3.5" fill="#ffffff"/>
+  <!-- Carré bas-gauche : violet -->
+  <rect x="4" y="106" width="90" height="90" rx="26" fill="#611e93"/>
+  <rect x="64" y="120" width="7" height="62" rx="3.5" fill="#ffffff"/>
+  <!-- Carré bas-droit : bleu marine -->
+  <rect x="106" y="106" width="90" height="90" rx="26" fill="#1a1a63"/>
+  <rect x="166" y="120" width="7" height="62" rx="3.5" fill="#ffffff"/>
+</svg>

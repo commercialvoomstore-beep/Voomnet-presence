@@ -1,8 +1,8 @@
 # VOOMNET Presence 2026
 
-## White Enterprise Technology
+## Innover. Connecter. Performer. — Solutions IT & Télécoms
 
-Plateforme de supervision et de gestion des présences de **VOOMNET TECHNOLOGY**. L'application permet aux administrateurs de superviser les collaborateurs en temps réel et aux employés d'enregistrer leur arrivée et leur départ du lundi au vendredi.
+Plateforme de supervision et de gestion des présences de **VOOMNET TECHNOLOGY**. L'application permet aux administrateurs de superviser les collaborateurs depuis un tableau centralisé et aux employés d'enregistrer leur arrivée et leur départ du lundi au vendredi.
 
 > **⚠️ Statut : prototype de démonstration.** Le stockage est local (fichiers JSON dans `data/`) et l'authentification est simplifiée. Ne pas déployer en production sans appliquer la checklist de la section [Passage en production](#passage-en-production). Aucune donnée personnelle réelle ne doit être ajoutée à ce dépôt.
 
@@ -14,13 +14,13 @@ Plateforme de supervision et de gestion des présences de **VOOMNET TECHNOLOGY**
 
 - Vue globale de l'organisation.
 - Horloge et date réelles (fuseau Africa/Abidjan).
-- Supervision automatique — rafraîchissement toutes les 5 secondes.
+- Supervision centralisée — consolidation automatique des compteurs et du tableau.
 - Recherche et filtres par statut.
 - Compteurs : présents, absents, retards, départs en attente, journées terminées.
 - Heure d'arrivée réelle, départ théorique (configurable) et départ réel.
 - Compteur dynamique avant la fin théorique de journée.
 - Panneau détaillé par employé avec historique sur 7 jours.
-- Registre des codes individuels avec régénération (unitaire ou globale).
+- Registre des codes individuels au format `3CX-{matricule}-{suffixe}` (ex. `3CX-1009-589`), à usage unique, avec copie en un clic, régénération (unitaire ou globale) et historique des codes invalidés.
 - Notifications ciblées vers toute l'équipe ou un employé.
 - Annuaire des employés avec photos de profil.
 - Page Paramètres : heures d'arrivée/départ, tolérance, jours ouvrés.
@@ -33,7 +33,7 @@ Plateforme de supervision et de gestion des présences de **VOOMNET TECHNOLOGY**
 - Pointage réel du départ.
 - Blocage du double pointage (409 en cas de tentative).
 - Historique des pointages (arrivée, départ, statut).
-- Compteur dynamique en temps réel jusqu'à l'heure théorique de départ.
+- Compteur dynamique jusqu'à l'heure théorique de départ.
 - Profil employé : renommage et ajout de photo depuis l'appareil (redimensionnée automatiquement).
 - Réception et suppression des notifications personnelles.
 
@@ -96,7 +96,13 @@ Le workflow est :
 
 ## Collaborateurs enregistrés
 
-Trois employés sont configurés par défaut, identifiés par leur matricule 3CX : `1009`, `1000`, `1004`. Les noms sont des placeholders (`Employé 1009`…) modifiables depuis l'espace employé ; départements et dates d'inscription non renseignés s'affichent comme `Non renseigné` / `Non renseignée`. Aucune donnée fictive n'est ajoutée.
+Trois employés de démonstration sont configurés par défaut (noms fictifs à vocation illustrative, modifiables depuis l'espace employé) :
+
+| Matricule 3CX | Nom | Département | Inscription |
+|---|---|---|---|
+| `1009` | Jean Kouassi | Support Technique | 15/01/2024 |
+| `1000` | Marie N'Guessan | Service Commercial | 03/06/2024 |
+| `1004` | Paul Yao | Informatique & Réseaux | 21/10/2024 |
 
 > **🔒 Confidentialité :** ne publier ni noms réels ni matricules associés dans la documentation publique (protection des données personnelles — cf. loi ivoirienne n° 2013-450). Les données locales vivent dans `data/`, exclu de Git.
 
@@ -114,19 +120,26 @@ Trois employés sont configurés par défaut, identifiés par leur matricule 3CX
 ```text
 voomnet-presence/
 ├── app/
-│   ├── page.jsx                     # Accueil : horloge + portails Admin / Employé
-│   ├── layout.jsx                   # Layout racine (métadonnées, styles)
-│   ├── globals.css                  # Design system white enterprise
+│   ├── page.jsx                     # Accueil : splash premium + horloge + portails
+│   ├── layout.jsx                   # Layout racine (métadonnées, styles, favicon)
+│   ├── globals.css                  # Design system white enterprise (base)
+│   ├── cc.css                       # Extension Command Center (hero, KPI, splash, panels…)
+│   ├── components/                  # Splash, PresenceRing, KpiCard, LiveFeed, Toasts,
+│   │                                # EmployeePanel, CommandPalette, SupervisionMode,
+│   │                                # PresenceFlow, DotGrid, SystemStatus, primitives…
 │   ├── admin/
 │   │   ├── page.jsx                 # Connexion administrateur
-│   │   └── dashboard/page.jsx       # Command Center (5 onglets)
+│   │   └── dashboard/page.jsx       # Command Center live (5 onglets)
 │   ├── employee/
 │   │   ├── page.jsx                 # Connexion employé (matricule + code)
 │   │   └── espace/page.jsx          # Espace employé (pointage, profil, historique)
 │   └── api/                         # Route Handlers (voir Routes API)
+├── public/
+│   ├── voomnet-logo.svg             # Logo VOOMNET TECHNOLOGY (vectoriel)
+│   └── voomnet-mark.svg             # Marque (4 carrés marine/violet) + favicon
 ├── lib/
 │   ├── db.js                        # Stockage JSON, amorçage, sessions, hachage
-│   └── rules.js                     # Règles horaires et statuts (Africa/Abidjan)
+│   └── rules.js                     # Règles horaires, statuts, pauses, durées (Africa/Abidjan)
 ├── data/                            # Données locales de démo (exclu de Git)
 ├── package.json
 └── .gitignore
@@ -167,6 +180,8 @@ Les actions disponibles sont :
 
 ```text
 arrival
+pause_start
+pause_end
 departure
 ```
 

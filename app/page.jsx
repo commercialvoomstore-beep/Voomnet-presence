@@ -1,63 +1,57 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import Splash from './components/Splash';
+import { LiveClock } from './components/primitives';
 
-function Clock() {
-  const [now, setNow] = useState(null);
-  useEffect(() => {
-    const tick = () => setNow(new Date());
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
-  if (!now) return <div className="clock-lg"><div className="clock-time">--:--:--</div></div>;
-  return (
-    <div className="clock-lg">
-      <div className="clock-time">
-        {now.toLocaleTimeString('fr-FR', { timeZone: 'Africa/Abidjan', hour12: false })}
-      </div>
-      <div className="clock-date">
-        {now.toLocaleDateString('fr-FR', {
-          timeZone: 'Africa/Abidjan',
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })}{' '}
-        — Abidjan
-      </div>
-    </div>
-  );
-}
+// Le splash ne joue qu'une seule fois par chargement de page :
+// un retour ultérieur sur l'accueil (bouton retour, navigation) ne le rejoue pas.
+let splashSeen = false;
 
 export default function HomePage() {
+  const [ready, setReady] = useState(splashSeen);
+
+  const handleDone = useCallback(() => {
+    splashSeen = true;
+    setReady(true);
+  }, []);
+
+  // Filet de sécurité : l'accueil ne reste jamais bloqué sur le splash.
+  useEffect(() => {
+    if (ready) return undefined;
+    const t = setTimeout(handleDone, 5000);
+    return () => clearTimeout(t);
+  }, [ready, handleDone]);
+
   return (
     <main className="container page">
+      {!ready && <Splash onDone={handleDone} />}
+
       <header className="row-between">
-        <div className="brand">
-          <div className="brand-mark">VP</div>
+        <div className="brand-logo">
+          <img src="/voomnet-mark.svg" alt="VOOMNET" width="40" height="40" />
           <div>
             <div className="brand-name">VOOMNET Presence</div>
-            <div className="brand-sub">White Enterprise Technology</div>
+            <div className="brand-sub">Solutions IT &amp; Télécoms</div>
           </div>
         </div>
-        <div className="clock">
-          <div className="clock-time">
-            {new Date().toLocaleTimeString('fr-FR', { timeZone: 'Africa/Abidjan', hour12: false })}
-          </div>
-        </div>
+        <LiveClock />
       </header>
 
-      <section className="hero">
+      <section className="home-hero">
+        <div className="home-logo">
+          <img src="/voomnet-logo.svg" alt="VOOMNET TECHNOLOGY" />
+        </div>
         <h1 className="hero-title">
           Supervision des présences <span>VOOMNET</span>
         </h1>
+        <div className="home-slogan">Innover. Connecter. Performer.</div>
         <p className="hero-sub">
-          Pointage hebdomadaire du lundi au vendredi — arrivée, départ et suivi en temps réel.
+          Pointage hebdomadaire du lundi au vendredi — arrivée, pauses et départ, avec supervision centralisée.
         </p>
-        <div className="mt-3">
-          <Clock />
+        <div className="home-clock">
+          <LiveClock size="md" />
         </div>
       </section>
 
@@ -66,7 +60,7 @@ export default function HomePage() {
           <div className="portal-icon">🛡️</div>
           <div className="portal-title">Command Center</div>
           <p className="portal-desc">
-            Espace administrateur : supervision temps réel, registre des codes, notifications et
+            Espace administrateur : supervision centralisée, registre des codes, notifications et
             règles horaires.
           </p>
           <span className="btn">Accéder à l&apos;administration →</span>
@@ -76,15 +70,15 @@ export default function HomePage() {
           <div className="portal-icon">🕐</div>
           <div className="portal-title">Espace Employé</div>
           <p className="portal-desc">
-            Connexion par matricule 3CX et code personnel à usage unique pour pointer arrivée et
-            départ.
+            Connexion par matricule 3CX et code personnel à usage unique pour pointer arrivée,
+            pauses et départ.
           </p>
           <span className="btn btn-accent">Pointer ma présence →</span>
         </Link>
       </section>
 
       <footer className="mt-3 muted small" style={{ textAlign: 'center' }}>
-        Prototype de démonstration — VOOMNET TECHNOLOGY © 2026 · Fuseau Africa/Abidjan
+        VOOMNET TECHNOLOGY © 2026 · Innover. Connecter. Performer. · Fuseau Africa/Abidjan
       </footer>
     </main>
   );

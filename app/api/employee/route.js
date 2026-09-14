@@ -6,8 +6,9 @@ import {
   requireEmployee,
   getSession,
   getSettings,
+  normalizeRecord,
 } from '@/lib/db';
-import { abidjanNow, computeStatus } from '@/lib/rules';
+import { abidjanNow, computeStatus, historyStatus } from '@/lib/rules';
 
 function safeEmployee(emp) {
   return {
@@ -47,15 +48,20 @@ export async function GET(request) {
   const history = Object.entries(attendance[employee.matricule] || {})
     .sort((a, b) => (a[0] < b[0] ? 1 : -1))
     .slice(0, 14)
-    .map(([date, r]) => ({ date, arrival: r.arrival, departure: r.departure, status: computeStatus(r, settings, now) }));
+    .map(([date, r]) => {
+      const rec = normalizeRecord({ ...r });
+      return { date, arrival: rec.arrival, departure: rec.departure, pauses: rec.pauses, status: historyStatus(rec, settings) };
+    });
+
+  const todayRecord = record ? normalizeRecord({ ...record }) : null;
 
   return NextResponse.json({
     now,
     settings,
     employee: safeEmployee(employee),
-    today: record
-      ? { arrival: record.arrival, departure: record.departure, status: computeStatus(record, settings, now) }
-      : { arrival: null, departure: null, status: computeStatus(null, settings, now) },
+    today: todayRecord
+      ? { arrival: todayRecord.arrival, departure: todayRecord.departure, pauses: todayRecord.pauses, status: computeStatus(todayRecord, settings, now) }
+      : { arrival: null, departure: null, pauses: [], status: computeStatus(null, settings, now) },
     history,
     notifications,
   });

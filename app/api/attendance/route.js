@@ -4,24 +4,38 @@ import {
   readStore,
   writeStore,
   requireAdmin,
-  requireEmployee,
   getSession,
   getSettings,
+  normalizeRecord,
 } from '@/lib/db';
-import { abidjanNow, computeStatus, computeCounters, isWorkday } from '@/lib/rules';
+import { abidjanNow, computeStatus, computeCounters, historyStatus, isWorkday } from '@/lib/rules';
 
 function todayRecord(attendance, employeeId, date) {
   if (!attendance[employeeId]) attendance[employeeId] = {};
-  if (!attendance[employeeId][date]) attendance[employeeId][date] = { arrival: null, departure: null };
-  return attendance[employeeId][date];
+  if (!attendance[employeeId][date]) attendance[employeeId][date] = { arrival: null, departure: null, pauses: [] };
+  return normalizeRecord(attendance[employeeId][date]);
 }
 
-function historyOf(attendance, employeeId, limit = 14) {
+function historyOf(attendance, employeeId, settings, limit = 14) {
   const days = Object.entries(attendance[employeeId] || {})
     .sort((a, b) => (a[0] < b[0] ? 1 : -1))
     .slice(0, limit)
-    .map(([date, record]) => ({ date, ...record }));
+    .map(([date, record]) => {
+      const rec = normalizeRecord({ ...record });
+      return { date, arrival: rec.arrival, departure: rec.departure, pauses: rec.pauses, status: historyStatus(rec, settings) };
+    });
   return days;
+}
+
+function serializeToday(record, settings, now) {
+  if (!record) return { arrival: null, departure: null, pauses: [], status: computeStatus(null, settings, now) };
+  const rec = normalizeRecord({ ...record });
+  return {
+    arrival: rec.arrival,
+    departure: rec.departure,
+    pauses: rec.pauses,
+    status: computeStatus(rec, settings, now),
+  };
 }
 
 // GET /api/attendance — tableau de bord complet (réservé administrateur)
@@ -45,14 +59,8 @@ export async function GET(request) {
       department: emp.department,
       registeredAt: emp.registeredAt,
       photo: emp.photo,
-      today: record
-        ? {
-            arrival: record.arrival,
-            departure: record.departure,
-            status: computeStatus(record, settings, now),
-          }
-        : { arrival: null, departure: null, status: computeStatus(null, settings, now) },
-      history: historyOf(attendance, emp.matricule, 7),
+      today: serializeToday(record, settings, now),
+      history: historyOf(attendance, emp.matricule, settings, 7),
     };
   });
 
@@ -65,7 +73,9 @@ export async function GET(request) {
   });
 }
 
-// POST /api/attendance — pointage employé (arrival | departure)
+const ACTIONS = ['arrival', 'departure', 'pause_start', 'pause_end'];
+
+// POST /api/attendance — pointage employé (arrival | departure | pause_start | pause_end)
 export async function POST(request) {
   await seedIfEmpty();
   let body;
@@ -79,8 +89,8 @@ export async function POST(request) {
   const action = String(body?.action || '').trim();
   const sessionToken = String(body?.sessionToken || '').trim();
 
-  if (!['arrival', 'departure'].includes(action)) {
-    return NextResponse.json({ error: 'Action invalide (arrival | departure).' }, { status: 400 });
+  if (!ACTIONS.includes(action)) {
+    return NextResponse.json({ error: 'Action invalide (arrival | departure | pause_start | pause_end).' }, { status: 400 });
   }
 
   // Vérification de la session : jeton dédié à cet employé, ou jeton admin (supervision)
@@ -116,7 +126,7 @@ export async function POST(request) {
       );
     }
     record.arrival = now.time;
-  } else {
+  } else if (action === 'departure') {
     if (!record.arrival) {
       return NextResponse.json({ error: "Pointez d'abord votre arrivée." }, { status: 400 });
     }
@@ -126,7 +136,33 @@ export async function POST(request) {
         { status: 409 }
       );
     }
+    const open = record.pauses[record.pauses.length - 1];
+    if (open && open.start && !open.end) {
+      return NextResponse.json({ error: 'Terminez d\u2019abord votre pause en cours.' }, { status: 400 });
+    }
     record.departure = now.time;
+  } else if (action === 'pause_start') {
+    if (!record.arrival) {
+      return NextResponse.json({ error: "Pointez d'abord votre arrivée." }, { status: 400 });
+    }
+    if (record.departure) {
+      return NextResponse.json({ error: 'Journée déjà terminée : pause impossible.' }, { status: 400 });
+    }
+    const open = record.pauses[record.pauses.length - 1];
+    if (open && open.start && !open.end) {
+      return NextResponse.json(
+        { error: 'Pause déjà en cours depuis ' + open.start + '.' },
+        { status: 409 }
+      );
+    }
+    record.pauses.push({ start: now.time, end: null });
+  } else {
+    // pause_end
+    const open = record.pauses[record.pauses.length - 1];
+    if (!open || !open.start || open.end) {
+      return NextResponse.json({ error: 'Aucune pause en cours.' }, { status: 400 });
+    }
+    open.end = now.time;
   }
 
   await writeStore('attendance', attendance);
@@ -135,10 +171,6 @@ export async function POST(request) {
     ok: true,
     action,
     date: now.date,
-    today: {
-      arrival: record.arrival,
-      departure: record.departure,
-      status: computeStatus(record, settings, now),
-    },
+    today: serializeToday(record, settings, now),
   });
 }
