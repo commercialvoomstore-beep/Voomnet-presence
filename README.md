@@ -327,3 +327,4 @@ Projet interne VOOMNET TECHNOLOGY. Pour toute modification, ouvrir une branche e
 ## Licence
 
 Usage interne — VOOMNET TECHNOLOGY. Tous droits réservés.
+MERCI
