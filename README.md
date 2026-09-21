@@ -43,7 +43,7 @@ Plateforme de supervision et de gestion des présences de **VOOMNET TECHNOLOGY**
 
 | Outil | Version minimale |
 |---|---|
-| Node.js | **18.17** (requis par Next.js 14) |
+| Node.js | **18.17** pour l'app ; **20.6+** pour les scripts `db:*` (`--env-file-if-exists`) |
 | npm | 9 |
 
 ```bash
@@ -71,9 +71,16 @@ Vérifier le build de production :
 npm run build
 ```
 
+Pour travailler sur PostgreSQL sans installer Neon :
+
+```bash
+export DATABASE_URL=postgresql://postgres@127.0.0.1:5432/voomnet_presence
+npm run db:migrate && npm run dev
+```
+
 ## Comptes administrateur de démonstration
 
-Les comptes sont créés automatiquement au premier lancement (mot de passe scrypt, fichier `data/admins.json`, hors dépôt Git). Les mots de passe de démonstration sont définis dans l'amorçage local (`lib/db.js`) — ne jamais y placer de mot de passe réel ; en production, utiliser des variables d'environnement et bcrypt.
+Les comptes sont créés automatiquement au premier lancement (mot de passe scrypt, fichier `data/admins.json`, hors dépôt Git). Les mots de passe de démonstration sont définis dans l'amorçage (`lib/store/defaults.js`, surchargeable par `VP_ADMIN_SUPER_PASSWORD` / `VP_ADMIN_IT_PASSWORD` en `.env.local`) — ne jamais y placer de mot de passe réel ; en production, utiliser des variables d'environnement et bcrypt.
 
 | Rôle | Identifiant |
 |---|---|
@@ -112,7 +119,8 @@ Trois employés de démonstration sont configurés par défaut (noms fictifs à 
 - React 18
 - CSS design system « white enterprise » (`app/globals.css`), sans dépendance externe
 - API Route Handlers Next.js
-- Stockage de démonstration local côté serveur (fichiers JSON dans `data/`)
+- Stockage serveur à double pilote : fichiers JSON (`data/`) ou **PostgreSQL / Neon** (`lib/store/`), choisi par `DATABASE_URL`
+- `pg` 8 (pool de connexions), migrations SQL dans `db/migrations/`
 - Sessions serveur à durée limitée (12 h) ; mots de passe admin hachés (scrypt)
 
 ## Structure du projet
@@ -138,8 +146,22 @@ voomnet-presence/
 │   ├── voomnet-logo.svg             # Logo VOOMNET TECHNOLOGY (vectoriel)
 │   └── voomnet-mark.svg             # Marque (4 carrés marine/violet) + favicon
 ├── lib/
-│   ├── db.js                        # Stockage JSON, amorçage, sessions, hachage
-│   └── rules.js                     # Règles horaires, statuts, pauses, durées (Africa/Abidjan)
+│   ├── db.js                        # Interface de stockage (JSON ou PostgreSQL), amorçage, sessions, hachage
+│   ├── rules.js                     # Règles horaires, statuts, pauses, durées (Africa/Abidjan)
+│   └── store/                       # Pilotes de persistance
+│       ├── client.js                # Pool pg, transactions, état de connexion
+│       ├── pgsql.js                 # Adaptateur PostgreSQL (readStore/writeStore en SQL)
+│       ├── json.js                  # Adaptateur fichiers data/*.json
+│       ├── seed.js                  # Amorçage de la base (admins, employés, codes, settings)
+│       ├── codes.js                 # Génération des codes 3CX
+│       ├── security.js              # scrypt, sel, comparaison temps constant
+│       └── defaults.js              # Paramètres et fiches de démonstration
+├── db/
+│   └── migrations/                  # Migrations SQL (0001_init.sql)
+├── scripts/
+│   ├── migrate.mjs                  # npm run db:migrate
+│   ├── db-import.mjs                # npm run db:import (data/*.json -> base)
+│   └── db-status.mjs                # npm run db:status (diagnostic)
 ├── data/                            # Données locales de démo (exclu de Git)
 ├── package.json
 └── .gitignore
@@ -222,13 +244,68 @@ Le dossier `data/` contient les données locales de démonstration :
 
 Supprimer le dossier `data/` réinitialise complètement la démonstration.
 
+## Base de données (PostgreSQL / Neon)
+
+Le stockage de démonstration (`data/*.json`) et le stockage PostgreSQL coexistent
+derrière la même interface : **la base est activée dès que `DATABASE_URL` est défini**,
+sinon l'application reste sur les fichiers. Aucune route n'a été modifiée.
+
+### 1. Renseigner la chaîne de connexion
+
+Copier `.env.example` en `.env.local` et y coller l'URL de la base Neon
+(`Dashboard → Connection Details → Pooled connection`, qui traverse le pooler et
+supporte mieux les connexions courtes) :
+
+```ini
+DATABASE_URL=postgresql://<user>:<password>@<endpoint>-pooler.<region>.aws.neon.tech/neondb?sslmode=require
+```
+
+`sslmode=require` est ajouté automatiquement pour un hôte `*.neon.tech` / `*.neon.run`;
+`DB_SSL=disable` sert aux PostgreSQL locaux de développement.
+
+### 2. Créer le schéma, puis importer les données existantes
+
+```bash
+npm run db:migrate          # applique db/migrations/*.sql (table vp_migrations)
+npm run db:import           # recharge data/*.json dans les tables (option --dry-run)
+npm run db:status           # connexion, volumétrie, écart base <> fichiers
+```
+
+### 3. Schéma
+
+| Table | Rôle | Clés / index |
+|---|---|---|
+| `employees` | fiches employés | `matricule` PK, `department`, ordre `ord`, `data jsonb` |
+| `attendance` | un pointage par (matricule, journée) | PK `(matricule, day)` — `day` est un vrai `date` |
+| `access_codes` | code d'accès actif | `matricule` PK, `code` UNIQUE, TTL, usage unique |
+| `code_events` | journal émissions / usages / révocations | `at DESC` par matricule |
+| `sessions` | sessions 12 h | `token` PK, index sur `expires_at` |
+| `notifications` | messages interne admin → équipe | index `(target, created_at DESC)` |
+| `admins` | comptes administrateurs | `email` PK, sel + empreinte scrypt |
+| `settings` | paramètres de présence | ligne unique (`CHECK (id = 1)`) |
+
+Les colonnes utilisées par les requêtes sont relationnelles et indexées ; le reste de
+la fiche est conservé en `jsonb` pour que les routes retrouvent exactement les mêmes
+objets qu'en mode fichier. `attendance.matricule` et `access_codes.matricule` sont en
+clé étrangère vers `employees` avec `ON DELETE CASCADE` : supprimer une fiche emporte
+pointages et codes (en mode fichier, ils restaient orphelins).
+
+### 4. Vérifier
+
+```bash
+npm run build && npm run dev
+```
+
+Les 9 routes API fonctionnent sur les deux pilotes ; `db:status` doit afficher des
+compteurs identiques entre la base et `data/*.json` après un `db:import`.
+
 ## Passage en production
 
 Avant mise en production :
 
-1. Configurer `DATABASE_URL` (fournir un `.env.example` documentant toutes les variables requises).
-2. Remplacer le stockage JSON par PostgreSQL.
-3. Ajouter Drizzle ORM et les migrations.
+1. ~~Configurer `DATABASE_URL` (fournir un `.env.example` documentant toutes les variables requises).~~ **fait**
+2. ~~Remplacer le stockage JSON par PostgreSQL.~~ **fait** (pilote `pg` dans `lib/store/`, bascule automatique)
+3. Ajouter un ORM et des migrations versionnées — migrations SQL manuelles en place (`db/migrations/`, `vp_migrations`), Drizzle reste optionnel.
 4. Ajouter JWT access/refresh.
 5. Hacher les mots de passe et secrets avec bcrypt, sortir les secrets du code source.
 6. Ajouter une authentification serveur sur toutes les routes (y compris `/api/settings` et `/api/codes`).
