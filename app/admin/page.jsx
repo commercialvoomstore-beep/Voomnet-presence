@@ -86,8 +86,10 @@ export default function AdminLoginPage() {
         </form>
 
         <div className="auth-hint">
-          Comptes de démonstration (stockage local) : <code>admin@voomnet.ci</code> ·{' '}
-          <code>it@voomnet.ci</code> — mot de passe défini localement dans <code>data/</code>.
+          Comptes de démonstration : <code>admin@voomnet.ci</code> ·{' '}
+          <code>it@voomnet.ci</code> — créés au premier lancement par{' '}
+          <code>lib/store/seed.js</code> (surchargeable par <code>VP_ADMIN_SUPER_PASSWORD</code>).
+          Saisissez l’e-mail complet, sans espace final.
         </div>
 
         <p className="small muted mt-2" style={{ textAlign: 'center' }}>
